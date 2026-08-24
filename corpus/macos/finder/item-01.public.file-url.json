@@ -1,0 +1,15 @@
+{
+  "format": "public.file-url",
+  "flavor": "FileList",
+  "origin": "captured",
+  "description": "public.file-url from the macOS general pasteboard (2 items)",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Finder",
+  "app_version": "15.5",
+  "how": "Created /private/tmp/rclip-capture/files/{alpha.txt,beta.txt}, opened that folder in Finder, selected both, Edit > Copy. Two NSPasteboardItems, one per file.",
+  "bytes": 34,
+  "item": 1,
+  "redacted": false,
+  "notes": "The second NSPasteboardItem. This is the point of the multi-item capture: -[NSPasteboard dataForType:@\"public.file-url\"] returns item 0's URL only, so a file copy read through the pasteboard-level API silently loses every file but the first."
+}

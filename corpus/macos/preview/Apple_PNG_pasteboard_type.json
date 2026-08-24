@@ -1,0 +1,14 @@
+{
+  "format": "Apple PNG pasteboard type",
+  "flavor": null,
+  "origin": "captured",
+  "description": "Apple PNG pasteboard type from the macOS general pasteboard",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Preview",
+  "app_version": "11.0",
+  "how": "Opened /private/tmp/rclip-capture/bands.png (24x16 truecolour PNG, three vertical colour bands, written by hand with zlib), then Edit > Select All, Edit > Copy.",
+  "bytes": 200,
+  "redacted": false,
+  "notes": "Byte-identical to public.png. Unlike the HTML, RTF and TIFF legacy names, 'Apple PNG pasteboard type' is not in rclip-core's from_uti table, so it resolves to Flavor::Other while its twin resolves to Png."
+}

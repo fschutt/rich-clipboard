@@ -1,0 +1,14 @@
+{
+  "format": "dyn.ah62d4rv4gu8zazwuqm10c6xemf1gq54uqm10c6xenv61a3k",
+  "flavor": null,
+  "origin": "captured",
+  "description": "dyn.ah62d4rv4gu8zazwuqm10c6xemf1gq54uqm10c6xenv61a3k from the macOS general pasteboard",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Preview",
+  "app_version": "11.0",
+  "how": "Opened /private/tmp/rclip-capture/bands.png (24x16 truecolour PNG, three vertical colour bands, written by hand with zlib), then Edit > Select All, Edit > Copy.",
+  "bytes": 68,
+  "redacted": false,
+  "notes": "The same 68 bytes under Apple's dynamic UTI for the same private type. dyn. identifiers are a base-encoded legacy OSType/MIME/extension and are legal but opaque; decoding them belongs in rclip-core (PLAN.md 4.1), not here, so the capture carries the identifier verbatim."
+}

@@ -1,0 +1,14 @@
+{
+  "format": "public.tiff",
+  "flavor": "Tiff",
+  "origin": "captured",
+  "description": "public.tiff from the macOS general pasteboard",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Preview",
+  "app_version": "11.0",
+  "how": "Opened /private/tmp/rclip-capture/bands.png (24x16 truecolour PNG, three vertical colour bands, written by hand with zlib), then Edit > Select All, Edit > Copy.",
+  "bytes": 4556,
+  "redacted": false,
+  "notes": "Big-endian TIFF ('MM'), 24x16 RGB, 16 IFD entries. 4556 bytes for 384 pixels because tag 0x8773 carries a 3144-byte ICC profile."
+}

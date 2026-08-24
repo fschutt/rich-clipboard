@@ -1,0 +1,15 @@
+{
+  "format": "public.utf16-external-plain-text",
+  "flavor": null,
+  "origin": "captured",
+  "description": "public.utf16-external-plain-text from the macOS general pasteboard (2 items)",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Finder",
+  "app_version": "15.5",
+  "how": "Created /private/tmp/rclip-capture/files/{alpha.txt,beta.txt}, opened that folder in Finder, selected both, Edit > Copy. Two NSPasteboardItems, one per file.",
+  "bytes": 38,
+  "item": 0,
+  "redacted": false,
+  "notes": "The same CR-separated display names as UTF-16LE with a ff fe BOM."
+}

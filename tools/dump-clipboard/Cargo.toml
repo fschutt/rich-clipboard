@@ -11,3 +11,51 @@ authors.workspace      = true
 
 [dependencies]
 rclip-core = { workspace = true, features = ["std"] }
+
+# --- macOS -------------------------------------------------------------------
+# objc2 0.6 / objc2-app-kit 0.3: the maintained successor to `cocoa`/`objc`,
+# with per-class feature gates so we compile NSPasteboard and nothing else.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "NSPasteboard",
+    "NSPasteboardItem",
+] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "NSArray",
+    "NSData",
+    "NSEnumerator", # NSArray::iter
+    "NSString",
+] }
+
+# --- Windows -----------------------------------------------------------------
+# windows-sys, not `windows`: this is raw Win32 with no COM, and the -sys crate
+# is just extern declarations, so it costs nothing to build.
+[target.'cfg(target_os = "windows")'.dependencies.windows-sys]
+version = "0.61.2"
+features = [
+    "Win32_Foundation",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+]
+
+# --- X11 and Wayland ---------------------------------------------------------
+# Both backends ship in the same binary and are selected at run time.
+[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))'.dependencies]
+# x11rb: pure-Rust X11 protocol, no libxcb to link against.
+x11rb = "0.13.2"
+# wayland-client 0.31 with the pure-Rust backend (default-features = false
+# drops `client_system`, so libwayland-client.so is not needed to build).
+wayland-client = { version = "0.31.15", default-features = false }
+# ext-data-control-v1 (staging) and its wlroots predecessor: a CLI has no
+# surface and therefore never gets keyboard focus, so wl_data_device is not
+# reachable and the data-control path is the only one that works.
+wayland-protocols = { version = "0.32.13", default-features = false, features = ["client", "staging"] }
+wayland-protocols-wlr = { version = "0.3.12", default-features = false, features = ["client"] }
+# Already in the tree via wayland-backend; used for pipe(2) and poll(2) so the
+# fd reads cannot hang forever on a wedged source client.
+rustix = { version = "1.0.2", features = ["pipe", "event"] }

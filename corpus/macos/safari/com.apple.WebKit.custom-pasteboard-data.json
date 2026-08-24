@@ -1,0 +1,14 @@
+{
+  "format": "com.apple.WebKit.custom-pasteboard-data",
+  "flavor": null,
+  "origin": "captured",
+  "description": "com.apple.WebKit.custom-pasteboard-data from the macOS general pasteboard",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Safari",
+  "app_version": "18.5",
+  "how": "Opened file:///private/tmp/rclip-capture/page.html (h1, a paragraph with bold/italic and a link, a 3-row bordered table), used the Find bar to move focus into the page, then Edit > Select All, Edit > Copy.",
+  "bytes": 66,
+  "redacted": true,
+  "notes": "REDACTED. WebKit's per-copy pasteboard origin token: a length-prefixed \"null:<uuid>\" string, zero-padded to 66 bytes. The UUID was replaced in place with 00000000-0000-4000-8000-000000000000, the same 36 bytes, so every offset in the record still holds. It is a fresh random value per copy and identifies nothing outside the session that produced it."
+}

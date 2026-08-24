@@ -286,6 +286,17 @@ impl<'a> Flavor<'a> {
 
     /// Recognize a macOS UTI, including the legacy `NSPasteboardType` names
     /// that still show up on real pasteboards.
+    ///
+    /// Deliberately unmapped, from what live captures in `corpus/macos/` show:
+    /// `com.apple.webarchive` (a Safari bundle of HTML plus its resources —
+    /// the richest thing Safari offers, but there is no codec for it yet),
+    /// `public.utf16-external-plain-text` (text, but UTF-16LE-with-BOM, so
+    /// mapping it to [`Flavor::PlainText`] would hand a UTF-8 decoder
+    /// garbage), and `CorePasteboardFlavorType 0xNNNNNNNN` (a legacy OSType
+    /// wrapper — `0x75753136` is `ut16`). Each needs its own variant rather
+    /// than being forced into a neighbouring one.
+    // TODO(phase-2): add WebArchive and PlainTextUtf16 variants, and decode
+    // the OSType wrapper.
     #[must_use]
     pub fn from_uti(s: &'a str) -> Self {
         match s {
@@ -294,7 +305,11 @@ impl<'a> Flavor<'a> {
             }
             "public.html" | "Apple HTML pasteboard type" => Self::Html,
             "public.rtf" | "NeXT Rich Text Format v1.0 pasteboard type" => Self::Rtf,
-            "public.png" => Self::Png,
+            // Every modern UTI has a legacy twin on a real pasteboard, carrying
+            // byte-identical data. Mapping only one of a pair means a consumer
+            // that happens to look at the other sees Flavor::Other and skips
+            // content it could have used.
+            "public.png" | "Apple PNG pasteboard type" => Self::Png,
             "public.jpeg" => Self::Jpeg,
             "com.compuserve.gif" => Self::Gif,
             "public.tiff" | "NeXT TIFF v4.0 pasteboard type" => Self::Tiff,

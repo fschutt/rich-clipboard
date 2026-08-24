@@ -1,0 +1,14 @@
+{
+  "format": "Apple HTML pasteboard type",
+  "flavor": "Html",
+  "origin": "captured",
+  "description": "Apple HTML pasteboard type from the macOS general pasteboard",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Safari",
+  "app_version": "18.5",
+  "how": "Opened file:///private/tmp/rclip-capture/page.html (h1, a paragraph with bold/italic and a link, a 3-row bordered table), used the Find bar to move focus into the page, then Edit > Select All, Edit > Copy.",
+  "bytes": 1508,
+  "redacted": false,
+  "notes": "Byte-identical to the modern UTI's data: AppKit publishes the legacy NSPasteboardType name and the UTI as two names for one representation."
+}

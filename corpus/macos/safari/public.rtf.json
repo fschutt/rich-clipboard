@@ -1,0 +1,14 @@
+{
+  "format": "public.rtf",
+  "flavor": "Rtf",
+  "origin": "captured",
+  "description": "public.rtf from the macOS general pasteboard",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Safari",
+  "app_version": "18.5",
+  "how": "Opened file:///private/tmp/rclip-capture/page.html (h1, a paragraph with bold/italic and a link, a 3-row bordered table), used the Find bar to move focus into the page, then Edit > Select All, Edit > Copy.",
+  "bytes": 3156,
+  "redacted": false,
+  "notes": "Safari converts the selection to RTF itself rather than going through the HTML: the link becomes {\\field{\\*\\fldinst{HYPERLINK \"https://example.org/target\"}}{\\fldrslt ...}} and the table becomes three \\trowd rows. Three times the size of the HTML for the same selection."
+}

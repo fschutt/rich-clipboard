@@ -1,0 +1,15 @@
+{
+  "format": "public.file-url",
+  "flavor": "FileList",
+  "origin": "captured",
+  "description": "public.file-url from the macOS general pasteboard (2 items)",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Finder",
+  "app_version": "15.5",
+  "how": "Created /private/tmp/rclip-capture/files/{alpha.txt,beta.txt}, opened that folder in Finder, selected both, Edit > Copy. Two NSPasteboardItems, one per file.",
+  "bytes": 34,
+  "item": 0,
+  "redacted": false,
+  "notes": "Finder does not put a path URL on the pasteboard. It puts the opaque file:///.file/id=<volume id>.<file id> form, which only the file system can resolve - exactly the resolution a codec must never do. The numbers are an ephemeral volume id and an inode of a /private/tmp file; they are not a volume UUID and identify nothing outside this boot, so they are left as captured."
+}

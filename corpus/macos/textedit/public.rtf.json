@@ -1,0 +1,14 @@
+{
+  "format": "public.rtf",
+  "flavor": "Rtf",
+  "origin": "captured",
+  "description": "public.rtf from the macOS general pasteboard",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "TextEdit",
+  "app_version": "1.20",
+  "how": "Opened /private/tmp/rclip-capture/styled.rtf (a hand-written RTF with bold/italic/both runs, two fonts, a red colour-table entry and one \\'e9 accent), then Edit > Select All, Edit > Copy.",
+  "bytes": 673,
+  "redacted": false,
+  "notes": "TextEdit's Cocoa RTF writer: \\cocoartf2822, a {\\*\\expandedcolortbl} alongside the plain \\colortbl, the accent emitted as the Windows-1252 hex escape \\'e9 under \\ansicpg1252 rather than as \\u233, and '\\' + newline as the paragraph mark. Note the font table has one entry per style (Helvetica, Helvetica-Bold, Helvetica-Oblique, Helvetica-BoldOblique) instead of using \\b and \\i alone."
+}

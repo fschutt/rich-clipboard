@@ -1,0 +1,15 @@
+{
+  "format": "public.utf8-plain-text",
+  "flavor": "PlainText",
+  "origin": "captured",
+  "description": "public.utf8-plain-text from the macOS general pasteboard (2 items)",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Finder",
+  "app_version": "15.5",
+  "how": "Created /private/tmp/rclip-capture/files/{alpha.txt,beta.txt}, opened that folder in Finder, selected both, Edit > Copy. Two NSPasteboardItems, one per file.",
+  "bytes": 18,
+  "item": 0,
+  "redacted": false,
+  "notes": "Finder's textual form of the selection is the display names separated by CR (0x0d) - not LF, and not the URLs. Only item 0 carries it; item 1 has the file URL alone."
+}

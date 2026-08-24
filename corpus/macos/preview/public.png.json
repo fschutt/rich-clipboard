@@ -1,0 +1,14 @@
+{
+  "format": "public.png",
+  "flavor": "Png",
+  "origin": "captured",
+  "description": "public.png from the macOS general pasteboard",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Preview",
+  "app_version": "11.0",
+  "how": "Opened /private/tmp/rclip-capture/bands.png (24x16 truecolour PNG, three vertical colour bands, written by hand with zlib), then Edit > Select All, Edit > Copy.",
+  "bytes": 200,
+  "redacted": false,
+  "notes": "Preview re-encodes rather than copying the file's bytes: the 93-byte source PNG comes back as 200 bytes with sRGB and eXIf chunks added."
+}

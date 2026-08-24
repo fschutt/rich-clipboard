@@ -1,0 +1,14 @@
+{
+  "format": "NSStringPboardType",
+  "flavor": "PlainText",
+  "origin": "captured",
+  "description": "NSStringPboardType from the macOS general pasteboard",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "TextEdit",
+  "app_version": "1.20",
+  "how": "Opened /private/tmp/rclip-capture/styled.rtf (a hand-written RTF with bold/italic/both runs, two fonts, a red colour-table entry and one \\'e9 accent), then Edit > Select All, Edit > Copy.",
+  "bytes": 83,
+  "redacted": false,
+  "notes": "Byte-identical to the modern UTI's data: AppKit publishes the legacy NSPasteboardType name and the UTI as two names for one representation."
+}

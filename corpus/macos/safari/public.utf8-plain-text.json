@@ -1,0 +1,14 @@
+{
+  "format": "public.utf8-plain-text",
+  "flavor": "PlainText",
+  "origin": "captured",
+  "description": "public.utf8-plain-text from the macOS general pasteboard",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Safari",
+  "app_version": "18.5",
+  "how": "Opened file:///private/tmp/rclip-capture/page.html (h1, a paragraph with bold/italic and a link, a 3-row bordered table), used the Find bar to move focus into the page, then Edit > Select All, Edit > Copy.",
+  "bytes": 72,
+  "redacted": false,
+  "notes": "Tab-separated table cells, LF between blocks."
+}

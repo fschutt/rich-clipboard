@@ -74,3 +74,26 @@ fn metadata_flavors_are_not_content() {
     assert!(!Flavor::DropEffect.is_content());
     assert!(Flavor::PlainText.is_content());
 }
+
+#[test]
+fn legacy_pasteboard_twins_resolve_the_same_as_their_modern_uti() {
+    // A live macOS pasteboard carries both spellings with byte-identical data.
+    // These pairs are all present in corpus/macos/; resolving only one of a
+    // pair makes a consumer's behaviour depend on which twin it happened to
+    // read first.
+    for (modern, legacy) in [
+        ("public.utf8-plain-text", "NSStringPboardType"),
+        ("public.html", "Apple HTML pasteboard type"),
+        ("public.rtf", "NeXT Rich Text Format v1.0 pasteboard type"),
+        ("public.tiff", "NeXT TIFF v4.0 pasteboard type"),
+        ("public.png", "Apple PNG pasteboard type"),
+        ("public.file-url", "NSFilenamesPboardType"),
+        ("public.url", "Apple URL pasteboard type"),
+    ] {
+        assert_eq!(
+            Flavor::from_uti(modern),
+            Flavor::from_uti(legacy),
+            "{legacy} carries the same bytes as {modern} and must resolve alike"
+        );
+    }
+}

@@ -1,0 +1,14 @@
+{
+  "format": "com.apple.webarchive",
+  "flavor": null,
+  "origin": "captured",
+  "description": "com.apple.webarchive from the macOS general pasteboard",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Safari",
+  "app_version": "18.5",
+  "how": "Opened file:///private/tmp/rclip-capture/page.html (h1, a paragraph with bold/italic and a link, a 3-row bordered table), used the Find bar to move focus into the page, then Edit > Select All, Edit > Copy.",
+  "bytes": 1796,
+  "redacted": false,
+  "notes": "A bplist00 binary plist holding the main resource's bytes, MIME type, text encoding and source URL (file:///private/tmp/rclip-capture/page.html - a throwaway file, not a real document)."
+}

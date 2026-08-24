@@ -1,0 +1,14 @@
+{
+  "format": "public.html",
+  "flavor": "Html",
+  "origin": "captured",
+  "description": "public.html from the macOS general pasteboard",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Safari",
+  "app_version": "18.5",
+  "how": "Opened file:///private/tmp/rclip-capture/page.html (h1, a paragraph with bold/italic and a link, a 3-row bordered table), used the Find bar to move focus into the page, then Edit > Select All, Edit > Copy.",
+  "bytes": 1508,
+  "redacted": false,
+  "notes": "WebKit inlines the selection context's computed style onto every top-level element and wraps runs of spaces in <span class=\"Apple-converted-space\">. There is no CF_HTML-style offset header: the fragment starts at byte 0, prefixed by a <head><meta charset=\"UTF-8\"> that WebKit synthesises."
+}

@@ -1,0 +1,14 @@
+{
+  "format": "public.utf16-external-plain-text",
+  "flavor": null,
+  "origin": "captured",
+  "description": "public.utf16-external-plain-text from the macOS general pasteboard",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "TextEdit",
+  "app_version": "1.20",
+  "how": "Opened /private/tmp/rclip-capture/styled.rtf (a hand-written RTF with bold/italic/both runs, two fonts, a red colour-table entry and one \\'e9 accent), then Edit > Select All, Edit > Copy.",
+  "bytes": 166,
+  "redacted": false,
+  "notes": "UTF-16 *little*-endian with a ff fe BOM, despite 'external' conventionally implying network byte order. Not in rclip-core's UTI table, so it resolves to Flavor::Other."
+}

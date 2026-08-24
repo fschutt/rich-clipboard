@@ -1,0 +1,14 @@
+{
+  "format": "PVPboardInfoPboardType",
+  "flavor": null,
+  "origin": "captured",
+  "description": "PVPboardInfoPboardType from the macOS general pasteboard",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Preview",
+  "app_version": "11.0",
+  "how": "Opened /private/tmp/rclip-capture/bands.png (24x16 truecolour PNG, three vertical colour bands, written by hand with zlib), then Edit > Select All, Edit > Copy.",
+  "bytes": 68,
+  "redacted": false,
+  "notes": "A private Preview flavor: a bplist00 with the single key twoRepresentations, saying that the image is on the pasteboard as both PNG and TIFF."
+}

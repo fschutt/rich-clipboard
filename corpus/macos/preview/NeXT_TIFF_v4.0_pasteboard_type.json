@@ -1,0 +1,14 @@
+{
+  "format": "NeXT TIFF v4.0 pasteboard type",
+  "flavor": "Tiff",
+  "origin": "captured",
+  "description": "NeXT TIFF v4.0 pasteboard type from the macOS general pasteboard",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Preview",
+  "app_version": "11.0",
+  "how": "Opened /private/tmp/rclip-capture/bands.png (24x16 truecolour PNG, three vertical colour bands, written by hand with zlib), then Edit > Select All, Edit > Copy.",
+  "bytes": 4556,
+  "redacted": false,
+  "notes": "Byte-identical to the modern UTI's data: AppKit publishes the legacy NSPasteboardType name and the UTI as two names for one representation."
+}
