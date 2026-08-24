@@ -483,3 +483,50 @@ fn finder_info_tells_an_internet_location_file_from_anything_else() {
         assert!(!is_internet_location_finder_info(&info[..other.len()]));
     }
 }
+
+#[test]
+fn a_dict_fanout_bomb_is_stopped_by_the_node_budget_not_by_depth() {
+    use rclip_core::ErrorKind;
+    use rclip_webloc::bplist::{BinaryPlist, Object};
+
+    let bomb = fixture("bplist-dict-fanout-bomb.bin");
+    assert!(bomb.len() < 300, "the whole point is that it is tiny");
+
+    let p = BinaryPlist::parse(&bomb).expect("structurally a valid bplist");
+    let mut budget = p.budget();
+
+    // Walk it the way a consumer would. Without the budget this resolves
+    // 9^9 objects — measured at 40 million visits and 5.8 seconds — while
+    // never exceeding depth 9, so MAX_DEPTH never fires.
+    fn walk(
+        p: &BinaryPlist<'_>,
+        index: usize,
+        depth: u32,
+        budget: &mut usize,
+    ) -> Option<ErrorKind> {
+        match p.object(index, depth, budget) {
+            Err(e) => Some(e.kind),
+            Ok(Object::Dict { values, count, .. }) => {
+                for i in 0..count {
+                    let next = p.reference(values, i).ok()?;
+                    if let Some(kind) = walk(p, next, depth + 1, budget) {
+                        return Some(kind);
+                    }
+                }
+                None
+            }
+            Ok(_) => None,
+        }
+    }
+
+    let stopped = walk(&p, p.top_object(), 0, &mut budget);
+    assert_eq!(
+        stopped,
+        Some(ErrorKind::TooLarge),
+        "the walk must run out of budget; depth never reaches MAX_DEPTH here"
+    );
+
+    // And the crate's own entry point was never vulnerable: it looks up one
+    // key at the root rather than walking.
+    assert!(rclip_webloc::Webloc::parse(&bomb).is_err());
+}

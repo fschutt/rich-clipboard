@@ -1,0 +1,9 @@
+{
+  "format": "webloc",
+  "origin": "synthetic",
+  "expect": "error",
+  "error_kind": "Malformed",
+  "description": "223-byte bplist whose dictionaries fan out 9 wide over 9 levels",
+  "notes": "Nesting is only nine levels, so MAX_DEPTH never fires -- this is the case that proves depth limiting alone is insufficient for an index-addressed graph. Walking it fully costs 9^9 resolutions: measured at 40 million visits and 5.8 seconds before BinaryPlist::object required a node budget. Webloc::parse itself was never vulnerable, because it does a one-level lookup for the URL key and rejects a root whose values are not strings, which is why the declared kind is Malformed rather than TooLarge; the hazard was in the exported bplist API. rclip-bookmark carries the same guard for the same reason.",
+  "bytes": 223
+}

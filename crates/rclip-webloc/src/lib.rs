@@ -240,11 +240,15 @@ impl<'a> Webloc<'a> {
 
     fn parse_binary(buf: &'a [u8]) -> Result<Self> {
         let plist = BinaryPlist::parse(buf)?;
+        // One shared budget for the whole lookup, not one per key. This walk is
+        // only two levels deep so it cannot exhaust it, but taking the budget
+        // here means the safe call is the only call there is.
+        let mut budget = plist.budget();
         let bplist::Object::Dict {
             keys,
             values,
             count,
-        } = plist.object(plist.top_object(), 0)?
+        } = plist.object(plist.top_object(), 0, &mut budget)?
         else {
             // The root of a location file is a dictionary. An array or a bare
             // string at the root is a valid plist and not a .webloc.
@@ -254,7 +258,9 @@ impl<'a> Webloc<'a> {
         let mut url = None;
         let mut url_name = None;
         for i in 0..count {
-            let bplist::Object::Str(key) = plist.object(plist.reference(keys, i)?, 1)? else {
+            let bplist::Object::Str(key) =
+                plist.object(plist.reference(keys, i)?, 1, &mut budget)?
+            else {
                 // A non-string key is legal in a plist and meaningless here.
                 continue;
             };
@@ -267,7 +273,7 @@ impl<'a> Webloc<'a> {
                 // malformed one costs nothing.
                 continue;
             };
-            match plist.object(plist.reference(values, i)?, 1)? {
+            match plist.object(plist.reference(values, i)?, 1, &mut budget)? {
                 bplist::Object::Str(v) => *wanted = Some(v),
                 // A container where a string belongs — including a reference
                 // back to the root dictionary, which is how a hostile file
