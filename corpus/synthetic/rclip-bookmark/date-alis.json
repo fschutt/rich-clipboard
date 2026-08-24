@@ -1,0 +1,7 @@
+{
+  "format": "BookmarkData",
+  "origin": "synthetic",
+  "description": "'alis' magic; 0x0400 date records written big-endian, plus a 0x1010 flags record",
+  "expect": "ok",
+  "notes": "0x1040 holds 599529600.0 seconds after the 2001-01-01 CF epoch (2020-01-01T00:00:00Z, 1577836800 Unix) and 0x2013 holds 0.0. Both are IEEE doubles stored BIG-endian, the only big-endian field in the format; read little-endian they decode to ~1e-311 and 0.0 instead, so a wrong-endian reader passes the second assertion and fails the first. 0x1010 is three little-endian u64s: flags, asked-for mask, reserved. Uses the 'alis' signature to cover both magics."
+}

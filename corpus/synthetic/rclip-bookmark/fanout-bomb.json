@@ -1,0 +1,7 @@
+{
+  "format": "BookmarkData",
+  "origin": "synthetic",
+  "description": "Eight nested arrays of eight shared references each: 8^8 nodes from ~350 bytes",
+  "expect": "error",
+  "notes": "The other half of the recursion problem. Nothing here is cyclic and nothing nests deeper than eight levels, so MAX_DEPTH never fires; the blow-up is in the breadth. A reader that walks the graph without a total-node budget does 16 million resolutions for a 350-byte input. Expected: ErrorKind::TooLarge from Bookmark::validate(), promptly. Lazy field access (bm.path_components() and friends) is unaffected, because it only resolves what the caller asks for."
+}

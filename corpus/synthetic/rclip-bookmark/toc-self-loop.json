@@ -1,0 +1,7 @@
+{
+  "format": "BookmarkData",
+  "origin": "synthetic",
+  "description": "TOC whose next-TOC offset points back at itself",
+  "expect": "error",
+  "notes": "The TOC chain is walked with 'while next != 0'. Pointing next at the current TOC is an infinite loop with no recursion involved, so a depth limit does not catch it; mac_alias hangs here. Expected: the first TOC parses, then the chain is cut off with ErrorKind::Malformed once more TOCs have been seen than the payload could hold."
+}

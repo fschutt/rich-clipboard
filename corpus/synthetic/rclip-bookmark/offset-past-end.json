@@ -1,0 +1,7 @@
+{
+  "format": "BookmarkData",
+  "origin": "synthetic",
+  "description": "TOC entry whose record offset (0xFFFF0000) is far past the end of the buffer",
+  "expect": "error",
+  "notes": "Offsets are payload-relative u32s and entirely attacker-controlled. Expected: ErrorKind::BadOffset when the 0x1003 entry's value is read. The 0x1020 entry before it is well-formed, so a reader that gives up on the whole bookmark instead of on the one entry is over-strict."
+}

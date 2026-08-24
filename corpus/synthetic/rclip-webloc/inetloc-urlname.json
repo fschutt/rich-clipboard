@@ -1,0 +1,7 @@
+{
+  "format": "inetloc",
+  "origin": "synthetic",
+  "description": "XML plist with both URL and URLName, the shape a .inetloc carries",
+  "expect": "ok",
+  "notes": "A .webloc dict has only URL; .inetloc adds URLName, the human-readable title Finder shows. Same plist either way, so one parser covers both. Key order is URL then URLName here; the parser must not depend on it."
+}

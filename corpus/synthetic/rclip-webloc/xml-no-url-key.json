@@ -1,0 +1,7 @@
+{
+  "format": "webloc",
+  "origin": "synthetic",
+  "description": "Well-formed XML plist dictionary that has no URL key",
+  "expect": "error",
+  "notes": "The URL key is what makes a .webloc a .webloc. A structurally valid plist that lacks it is not a partial success. Expected: ErrorKind::Malformed."
+}

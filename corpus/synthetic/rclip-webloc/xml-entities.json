@@ -1,0 +1,7 @@
+{
+  "format": "webloc",
+  "origin": "synthetic",
+  "description": "XML plist whose URL contains &amp; &lt; &gt; &quot; and both numeric entity forms",
+  "expect": "ok",
+  "notes": "Every URL with a query string of more than one parameter hits this: CoreFoundation writes the '&' separators as '&amp;'. A parser that hands back the raw slice between the <string> tags returns a URL that is wrong in the most common case there is. Decoded value: https://example.com/s?q=a&b<c>d&e=\"f\"&gA"
+}

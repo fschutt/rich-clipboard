@@ -1,0 +1,7 @@
+{
+  "format": "BookmarkData",
+  "origin": "synthetic",
+  "description": "First twelve bytes of a bookmark; the header-size field and everything after is missing",
+  "expect": "error",
+  "notes": "Expected: ErrorKind::UnexpectedEof. The declared total size of 816 is a lie the reader must not act on."
+}

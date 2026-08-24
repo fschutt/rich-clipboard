@@ -1,0 +1,18 @@
+[package]
+name        = "rclip-bookmark"
+description = "Reader for macOS BookmarkData ('book'/'alis') — the modern Finder alias record"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[features]
+default = []
+## Enables the APIs that must own their output — currently only path joining.
+alloc = ["rclip-core/alloc"]
+std = ["alloc", "rclip-core/std"]
+
+[dependencies]
+rclip-core = { workspace = true }

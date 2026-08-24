@@ -1,0 +1,8 @@
+{
+  "format": "BookmarkData",
+  "origin": "captured",
+  "description": "NSURL.bookmarkData for a regular file, straight out of CoreFoundation on macOS 15.5 (24F74)",
+  "expect": "ok",
+  "notes": "Produced by a 15-line Objective-C program: [[NSURL fileURLWithPath:@\"/private/tmp/rclip-bookmark-target.txt\"] bookmarkDataWithOptions:0 includingResourceValuesForKeys:nil relativeToURL:nil error:&e]. 816 bytes, magic 'book', version 0x10040000, header size 48, one TOC with id 1. Keys present: 0x1004 (path components ['private','tmp','rclip-bookmark-target.txt']), 0x1005, 0x1010, 0x1040, 0x2002, 0x2005, 0x2010 ('Macintosh HD'), 0x2011, 0x2012, 0x2013, 0x2020, 0x2030, 0xf080. Worth noting what is NOT here: no 0x1003 target URL and no 0x1020 target filename, even though every writeup lists them - modern CoreFoundation describes a file target with the path array alone. REDACTED for public distribution: the 0x2011 volume UUID was replaced with the nil UUID and the 0xf080 sandbox extension HMAC with 64 zeros. Both substitutions are the same byte length as the originals, so every offset in the structure is untouched and the file is still a faithful CoreFoundation layout. The target was a throwaway file in /private/tmp for the same reason. Tests assert the UUID's length and the token's shape, never their values.",
+  "redacted": true
+}

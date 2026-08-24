@@ -1,0 +1,18 @@
+[package]
+name        = "rclip-webloc"
+description = "Reader for macOS .webloc / .inetloc internet location files (XML and bplist00)"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[features]
+default = []
+## Enables the APIs that must own their output — lossy decoding to `String`.
+alloc = ["rclip-core/alloc"]
+std = ["alloc", "rclip-core/std"]
+
+[dependencies]
+rclip-core = { workspace = true }

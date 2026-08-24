@@ -1,0 +1,7 @@
+{
+  "format": "webloc",
+  "origin": "synthetic",
+  "description": "Binary plist whose root object's offset-table entry points past the end of the file",
+  "expect": "error",
+  "notes": "Every object in a bplist is found through the offset table, and every entry in it comes off the wire. Expected: ErrorKind::BadOffset, not a panic and not a silently empty result."
+}

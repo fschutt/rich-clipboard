@@ -1,0 +1,7 @@
+{
+  "format": "webloc",
+  "origin": "synthetic",
+  "description": "Valid binary plist with the last twelve bytes of its 32-byte trailer cut off",
+  "expect": "error",
+  "notes": "The trailer is the last 32 bytes of the file, so truncating a binary plist does not shorten the trailer - it makes the reader parse 32 bytes of object data as one. The offset and reference sizes it finds there are nonsense, which is why the error is ErrorKind::Malformed and not UnexpectedEof. Worth pinning: a positional trailer means truncation is not an EOF condition, and a reader that only checks lengths will happily read garbage as structure."
+}

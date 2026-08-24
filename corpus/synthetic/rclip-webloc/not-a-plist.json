@@ -1,0 +1,7 @@
+{
+  "format": "webloc",
+  "origin": "synthetic",
+  "description": "Plain text that happens to contain a URL",
+  "expect": "error",
+  "notes": "Neither 'bplist00' nor an XML prolog. Expected: ErrorKind::BadMagic. Scraping the URL out of it anyway would mean the parser accepts arbitrary bytes, which is how a format sniffer becomes an oracle."
+}

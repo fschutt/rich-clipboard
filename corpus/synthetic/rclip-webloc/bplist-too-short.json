@@ -1,0 +1,7 @@
+{
+  "format": "webloc",
+  "origin": "synthetic",
+  "description": "First twenty bytes of a binary plist - shorter than the 8-byte header plus 32-byte trailer",
+  "expect": "error",
+  "notes": "The one truncation a binary plist can detect cheaply: below 40 bytes there is not room for a header and a trailer at once. Expected: ErrorKind::UnexpectedEof."
+}

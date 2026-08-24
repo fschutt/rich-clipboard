@@ -1,0 +1,7 @@
+{
+  "format": "webloc",
+  "origin": "captured",
+  "description": "The Finder-created webloc re-serialised by CoreFoundation's binary plist writer",
+  "expect": "ok",
+  "notes": "Produced with `plutil -convert binary1` on finder-created.webloc, so the bytes are CoreFoundation's own output. This is the shape a drag-created .webloc has. Exercises the extended-count string marker: the URL is 34 bytes, past the 15 that fit in a marker's low nibble, so it is written 0x5F followed by a 0x10 int object holding the real length. Object refs and offsets are one byte each at this size."
+}

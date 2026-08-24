@@ -1,0 +1,7 @@
+{
+  "format": "BookmarkData",
+  "origin": "synthetic",
+  "description": "Minimal 'book' with one TOC holding 0x1003 target URL and 0x1020 target filename",
+  "expect": "ok",
+  "notes": "48-byte header, version 0x10040000. Payload: u32 first-TOC offset, a 0x0901 URL record, a 0x0101 string record 'report.pdf', then a single TOC with magic 0xFFFFFFFE, id 1, next 0 and two 12-byte entries. Every offset is payload-relative, i.e. measured from byte 48."
+}

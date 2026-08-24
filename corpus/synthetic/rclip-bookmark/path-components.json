@@ -1,0 +1,7 @@
+{
+  "format": "BookmarkData",
+  "origin": "synthetic",
+  "description": "0x1004 array of four path components plus 0x2002 volume path and 0x2010 volume name",
+  "expect": "ok",
+  "notes": "The 0x0601 array record's payload is four little-endian u32 offsets, each pointing at a 0x0101 string record. Path components carry no separators: '/Users/example/Documents/report.pdf' is four entries."
+}

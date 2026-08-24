@@ -1,0 +1,7 @@
+{
+  "format": "webloc",
+  "origin": "synthetic",
+  "description": "Binary plist whose root dictionary maps the key URL to a reference back to the dictionary",
+  "expect": "error",
+  "notes": "Hand-built. Object references in a bplist are indices into an attacker-controlled offset table and nothing stops one pointing at its own container. The value of URL resolves to the root dict again, forever. Expected: an error and no hang - ErrorKind::Unsupported, because a container where a string belongs is a type failure before it is a depth failure."
+}

@@ -1,0 +1,7 @@
+{
+  "format": "BookmarkData",
+  "origin": "synthetic",
+  "description": "TOC entry whose key has bit 31 set, pointing at a string record that names it",
+  "expect": "ok",
+  "notes": "The second TOC entry's key word is 0x80000000 | offset-of-'com.example.custom'. A reader that misses bit 31 sees a nonsense two-billion key that matches nothing. The value is an array of two references to the SAME dictionary record, which is legal sharing rather than a cycle: it must parse, not trip the depth limit."
+}

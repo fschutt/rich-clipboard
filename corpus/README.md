@@ -43,3 +43,21 @@ Clipboard payloads are written by another process and parsed the moment a user p
 is the requirement a fuzzer will hammer.
 
 Keep fixtures small. These are unit-test inputs, not sample documents.
+
+## Captured fixtures and redaction
+
+Real captures are worth more than hand-built bytes, but they are cut from a real machine and
+routinely carry identifiers that have no business in a public repository — volume UUIDs, hardware
+serials, usernames, home paths, security tokens.
+
+**Scrub before committing, in place and at the same byte length.** Substituting an equal-length
+placeholder leaves every offset in the structure valid, so the fixture stays a faithful capture of
+the layout, which is the only reason it exists. Changing the length turns a real capture into a
+hand-built one wearing its clothes.
+
+Then: set `"redacted": true` in the sidecar, say in `notes` exactly which fields were replaced and
+with what, and make sure the tests assert *shape* rather than the substituted values — a test that
+pins a redacted byte string is a test that will be wrong the next time someone re-captures.
+
+Capture against throwaway targets in `/tmp` where the format embeds a path, and prefer a
+default-named volume over a personally-named one.

@@ -1,0 +1,7 @@
+{
+  "format": "BookmarkData",
+  "origin": "synthetic",
+  "description": "Otherwise well-formed header with a signature of 'junk'",
+  "expect": "error",
+  "notes": "Expected: ErrorKind::BadMagic at offset 0. Only 'book' and 'alis' are accepted."
+}

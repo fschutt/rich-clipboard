@@ -1,0 +1,7 @@
+{
+  "format": "BookmarkData",
+  "origin": "synthetic",
+  "description": "Header-size field of 0xFFFFFF00, far larger than the 64-byte blob",
+  "expect": "error",
+  "notes": "The header size is the base every other offset is measured from, so a reader that trusts it without checking it against the declared total size computes every subsequent offset from a bogus base. Expected: ErrorKind::BadLength."
+}

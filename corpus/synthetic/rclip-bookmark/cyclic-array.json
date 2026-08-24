@@ -1,0 +1,7 @@
+{
+  "format": "BookmarkData",
+  "origin": "synthetic",
+  "description": "0x0601 array whose only element offset points back at the array record itself",
+  "expect": "error",
+  "notes": "The most important fixture in this crate. Resolving element 0 yields the same array again, forever. A reader that recurses without a depth counter blows the stack; mac_alias does. Expected: ErrorKind::DepthLimit from Bookmark::validate() and from walking the array by hand, and no hang."
+}
