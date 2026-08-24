@@ -37,6 +37,26 @@ pub enum Error {
         /// The Cargo feature to enable on `rich-clipboard`.
         feature: &'static str,
     },
+    /// Every flavor on offer was larger than [`Limits`] allows, and the
+    /// oversize policy skipped each one.
+    ///
+    /// [`Limits`]: rclip_core::Limits
+    ///
+    /// This is a *second* line of defence and says so deliberately: by the time
+    /// a `ClipboardPayload` exists the bytes are already resident, because
+    /// something read them. Refusing here prevents *decoding* a huge payload —
+    /// which is where the amplification is, since a 60 MB 8-bit DIB becomes
+    /// 240 MB of RGBA — but it cannot prevent having received it. The transport
+    /// applies the first line, before it reads, using
+    /// [`SizeHint`](rclip_core::SizeHint).
+    Oversize {
+        /// The largest flavor that was refused, named the way `Debug` would.
+        flavor: &'static str,
+        /// Its encoded size.
+        bytes: u64,
+        /// The per-flavor cap it exceeded.
+        limit: u64,
+    },
     /// Nothing in this workspace decodes this flavor, whatever features are on.
     Unsupported {
         /// The platform-native identifier.
@@ -87,6 +107,15 @@ impl fmt::Display for Error {
             Self::FeatureDisabled { flavor, feature } => write!(
                 f,
                 "{flavor} needs the `{feature}` feature of rich-clipboard, which is off",
+            ),
+            Self::Oversize {
+                flavor,
+                bytes,
+                limit,
+            } => write!(
+                f,
+                "every flavor exceeded the size limit; largest was {flavor} at {bytes} bytes \
+                 against a {limit}-byte cap",
             ),
             Self::Unsupported { native } => {
                 write!(f, "no codec for clipboard format {native}")

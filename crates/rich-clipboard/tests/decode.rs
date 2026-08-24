@@ -523,3 +523,144 @@ fn when_every_flavor_fails_a_codec_error_is_what_is_reported() {
 
     assert!(matches!(decode_payload(&payload), Err(Error::Codec { .. })));
 }
+
+// ---------------------------------------------------------------------------
+// Size limits. These are the facade's half of PLAN.md §4b; the transport owns
+// the other half, before it reads.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn an_oversize_flavor_is_skipped_in_favour_of_a_smaller_one() {
+    use rclip_core::Limits;
+
+    // What a real paste of a big screenshot plus its caption looks like: the
+    // image is huge, the text is not. Refusing the image must leave the text.
+    let big = vec![0u8; 4096];
+    let payload = ClipboardPayload::new(Platform::MacOs)
+        .with("public.tiff", big)
+        .with("public.utf8-plain-text", b"caption".to_vec());
+
+    let opts = rich_clipboard::Options::new().limits(Limits {
+        max_flavor_bytes: 1024,
+        ..Limits::default()
+    });
+
+    let item = rich_clipboard::decode_payload_with(&payload, &opts)
+        .expect("skipping the image must still yield the text");
+    assert_eq!(item.plain_text(), Some("caption"));
+}
+
+#[test]
+fn the_policy_sees_the_flavor_and_its_exact_size() {
+    use rclip_core::{Flavor, Limits, Oversize, SizeHint};
+
+    let payload = ClipboardPayload::new(Platform::MacOs)
+        .with("public.tiff", vec![0u8; 4096])
+        .with("public.utf8-plain-text", b"caption".to_vec());
+    let opts = rich_clipboard::Options::new().limits(Limits {
+        max_flavor_bytes: 1024,
+        ..Limits::default()
+    });
+
+    let mut seen = Vec::new();
+    let item = rich_clipboard::decode_payload_policy(
+        &payload,
+        &opts,
+        &mut |f: Flavor<'_>, h: SizeHint, _: &Limits| {
+            seen.push((format!("{f:?}"), h));
+            Oversize::Skip
+        },
+    )
+    .unwrap();
+
+    assert_eq!(item.plain_text(), Some("caption"));
+    assert_eq!(seen.len(), 1, "only the oversize flavor is reported");
+    assert_eq!(seen[0].0, "Tiff");
+    assert_eq!(
+        seen[0].1,
+        SizeHint::Exact(4096),
+        "the bytes are in hand here, so the size is exact rather than a bound"
+    );
+}
+
+#[test]
+fn accept_overrides_the_limit_for_that_flavor_only() {
+    use rclip_core::{Flavor, Limits, Oversize, SizeHint};
+
+    let payload =
+        ClipboardPayload::new(Platform::MacOs).with("public.utf8-plain-text", vec![b'x'; 4096]);
+    let opts = rich_clipboard::Options::new().limits(Limits {
+        max_flavor_bytes: 16,
+        ..Limits::default()
+    });
+
+    let item = rich_clipboard::decode_payload_policy(
+        &payload,
+        &opts,
+        &mut |_: Flavor<'_>, _: SizeHint, _: &Limits| Oversize::Accept,
+    )
+    .expect("Accept means decode it anyway");
+    assert_eq!(item.plain_text().map(|s| s.len()), Some(4096));
+}
+
+#[test]
+fn abort_fails_the_whole_paste() {
+    use rclip_core::{Flavor, Limits, Oversize, SizeHint};
+
+    let payload = ClipboardPayload::new(Platform::MacOs)
+        .with("public.tiff", vec![0u8; 4096])
+        .with("public.utf8-plain-text", b"caption".to_vec());
+    let opts = rich_clipboard::Options::new().limits(Limits {
+        max_flavor_bytes: 1024,
+        ..Limits::default()
+    });
+
+    let err = rich_clipboard::decode_payload_policy(
+        &payload,
+        &opts,
+        &mut |_: Flavor<'_>, _: SizeHint, _: &Limits| Oversize::Abort,
+    )
+    .expect_err("Abort must not fall through to the text");
+    assert!(
+        matches!(err, rich_clipboard::Error::Oversize { .. }),
+        "{err:?}"
+    );
+}
+
+#[test]
+fn refusing_everything_reports_the_largest_offender() {
+    use rclip_core::Limits;
+
+    let payload = ClipboardPayload::new(Platform::MacOs)
+        .with("public.utf8-plain-text", vec![b'x'; 2048])
+        .with("public.tiff", vec![0u8; 9000]);
+    let opts = rich_clipboard::Options::new().limits(Limits {
+        max_flavor_bytes: 16,
+        ..Limits::default()
+    });
+
+    match rich_clipboard::decode_payload_with(&payload, &opts) {
+        Err(rich_clipboard::Error::Oversize {
+            flavor,
+            bytes,
+            limit,
+        }) => {
+            // The largest, not the last looked at — that is the number someone
+            // needs when they ask why the paste did nothing.
+            assert_eq!(flavor, "Tiff");
+            assert_eq!(bytes, 9000);
+            assert_eq!(limit, 16);
+        }
+        other => panic!("expected Oversize, got {other:?}"),
+    }
+}
+
+#[test]
+fn the_default_limits_do_not_interfere_with_a_realistic_paste() {
+    // A regression guard on the defaults themselves: anything a person
+    // actually copies must sail through without a policy being involved.
+    let payload =
+        ClipboardPayload::new(Platform::MacOs).with("public.utf8-plain-text", vec![b'x'; 1 << 20]);
+    let item = rich_clipboard::decode_payload(&payload).expect("1 MiB of text is ordinary");
+    assert_eq!(item.plain_text().map(|s| s.len()), Some(1 << 20));
+}

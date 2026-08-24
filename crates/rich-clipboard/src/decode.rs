@@ -3,7 +3,9 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use rclip_core::{ClipboardItem, ClipboardPayload, Flavor, Platform};
+use rclip_core::{
+    ClipboardItem, ClipboardPayload, Flavor, Limits, Oversize, OversizePolicy, Platform, SizeHint,
+};
 
 use crate::error::{Error, Result};
 use crate::item::{Image, ImageFormat, RichItem, TransferAction};
@@ -25,6 +27,7 @@ pub struct Options {
     alpha: rclip_dib::AlphaMode,
     #[cfg(feature = "html")]
     keep_html_markup: bool,
+    limits: Limits,
 }
 
 #[cfg(feature = "dib")]
@@ -39,6 +42,7 @@ impl Default for Options {
             alpha: rclip_dib::AlphaMode::Guess,
             #[cfg(feature = "html")]
             keep_html_markup: false,
+            limits: Limits::default(),
         }
     }
 }
@@ -48,6 +52,30 @@ impl Options {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Caps for this decode.
+    ///
+    /// These are a *second* line of defence, and it matters which. By the time
+    /// a [`ClipboardPayload`] exists the bytes are already resident, because
+    /// something read them — so this cannot stop a huge payload arriving. What
+    /// it stops is *decoding* one, which is where the amplification lives: a
+    /// 60 MB 8-bit `CF_DIB` becomes 240 MB of RGBA, and a flavor refused here
+    /// falls through to the next-best one, so a paste that would have cost a
+    /// quarter of a gigabyte becomes the plain-text version of the same thing.
+    ///
+    /// The first line belongs to the transport, before it reads, using
+    /// [`SizeHint`]. See `plan/PLAN.md` §4b.
+    #[must_use]
+    pub fn limits(mut self, limits: Limits) -> Self {
+        self.limits = limits;
+        self
+    }
+
+    /// The caps in force.
+    #[must_use]
+    pub const fn limits_ref(&self) -> &Limits {
+        &self.limits
     }
 
     /// How to interpret the alpha channel of a `CF_DIBV5`.
@@ -194,6 +222,49 @@ pub fn decode_payload(payload: &ClipboardPayload) -> Result<RichItem> {
 ///
 /// As [`decode_payload`].
 pub fn decode_payload_with(payload: &ClipboardPayload, options: &Options) -> Result<RichItem> {
+    // The default policy skips an oversize flavor, which is why this can be the
+    // no-callback entry point: skipping still yields a usable paste.
+    decode_payload_policy(payload, options, &mut DefaultPolicy)
+}
+
+/// A policy that skips anything oversize, per [`OversizePolicy`]'s default.
+struct DefaultPolicy;
+impl OversizePolicy for DefaultPolicy {}
+
+/// [`decode_payload_with`], asking `policy` what to do about an oversize flavor.
+///
+/// The callback fires *before* the bytes are decoded, once per flavor that
+/// exceeds [`Limits::max_flavor_bytes`], and its answer decides that flavor
+/// only:
+///
+/// - [`Oversize::Accept`] decodes it anyway.
+/// - [`Oversize::Skip`] moves on to the next-best flavor. A 400 MB TIFF goes
+///   and the plain text stays, which is why it is the default.
+/// - [`Oversize::Abort`] fails the whole paste with [`Error::Oversize`].
+///
+/// A closure is a policy. Its parameters need annotating, because `Flavor`
+/// borrows and inference will not produce the higher-ranked bound on its own:
+///
+/// ```ignore
+/// let item = decode_payload_policy(
+///     &payload,
+///     &opts,
+///     &mut |flavor: Flavor<'_>, hint: SizeHint, _: &Limits| {
+///         log::warn!("skipping {flavor:?} at {hint:?}");
+///         Oversize::Skip
+///     },
+/// )?;
+/// ```
+///
+/// # Errors
+///
+/// As [`decode_payload_with`], plus [`Error::Oversize`] if every flavor was
+/// refused on size.
+pub fn decode_payload_policy(
+    payload: &ClipboardPayload,
+    options: &Options,
+    policy: &mut impl OversizePolicy,
+) -> Result<RichItem> {
     let platform = payload.platform();
     if payload.is_empty() {
         return Err(Error::EmptyPayload);
@@ -208,8 +279,39 @@ pub fn decode_payload_with(payload: &ClipboardPayload, options: &Options) -> Res
     // own ordering — the first listing is the one it meant.
     candidates.sort_by_key(|i| i.flavor(platform).read_rank());
 
+    let limits = &options.limits;
     let mut first_error: Option<Error> = None;
+    // Remembered so that a payload where *everything* was refused reports the
+    // largest offender rather than the last one looked at, which is the more
+    // useful number when someone asks why their paste did nothing.
+    let mut biggest_refused: Option<(&'static str, u64)> = None;
+
     for item in candidates {
+        let flavor = item.flavor(platform);
+        // The size is exact here: the bytes are in hand. A transport that has
+        // not read yet gets `AtLeast` or `Unknown` instead, which is the whole
+        // reason `SizeHint` is three-valued.
+        let hint = SizeHint::Exact(item.bytes.len() as u64);
+        if limits.rejects(hint) {
+            match policy.on_oversize(flavor, hint, limits) {
+                Oversize::Accept => {}
+                Oversize::Skip => {
+                    let name = flavor_name(flavor);
+                    let bytes = item.bytes.len() as u64;
+                    if biggest_refused.is_none_or(|(_, b)| bytes > b) {
+                        biggest_refused = Some((name, bytes));
+                    }
+                    continue;
+                }
+                Oversize::Abort => {
+                    return Err(Error::Oversize {
+                        flavor: flavor_name(flavor),
+                        bytes: item.bytes.len() as u64,
+                        limit: limits.max_flavor_bytes,
+                    })
+                }
+            }
+        }
         match decode_with(item, platform, options) {
             Ok(decoded) => return Ok(enrich(decoded, payload, options)),
             Err(e) => {
@@ -225,12 +327,50 @@ pub fn decode_payload_with(payload: &ClipboardPayload, options: &Options) -> Res
         }
     }
 
-    match first_error {
-        Some(e) => Err(e),
-        // Every content flavor was unrecognised, so `decode` returned
-        // `RichItem::Unknown` for each and none of them failed. Unreachable in
-        // practice; kept as the honest fallback rather than an `unwrap`.
-        None => Ok(unknown_from_payload(payload)),
+    if let Some(e) = first_error {
+        return Err(e);
+    }
+    // Nothing decoded and nothing failed: either every flavor was refused on
+    // size, or every one was unrecognised.
+    if let Some((flavor, bytes)) = biggest_refused {
+        return Err(Error::Oversize {
+            flavor,
+            bytes,
+            limit: limits.max_flavor_bytes,
+        });
+    }
+    // Every content flavor was unrecognised, so `decode` returned
+    // `RichItem::Unknown` for each and none of them failed. Unreachable in
+    // practice; kept as the honest fallback rather than an `unwrap`.
+    Ok(unknown_from_payload(payload))
+}
+
+/// A `'static` name for a flavor, for [`Error::Oversize`].
+///
+/// `Flavor::Other` borrows, so it cannot be named here; every other variant is
+/// a unit and its `Debug` spelling is stable.
+fn flavor_name(flavor: Flavor<'_>) -> &'static str {
+    match flavor {
+        Flavor::PlainText => "PlainText",
+        Flavor::PlainTextUtf16 => "PlainTextUtf16",
+        Flavor::Html => "Html",
+        Flavor::Rtf => "Rtf",
+        Flavor::WebArchive => "WebArchive",
+        Flavor::Png => "Png",
+        Flavor::Jpeg => "Jpeg",
+        Flavor::Gif => "Gif",
+        Flavor::Tiff => "Tiff",
+        Flavor::Dib => "Dib",
+        Flavor::DibV5 => "DibV5",
+        Flavor::FileList => "FileList",
+        Flavor::ShellIdList => "ShellIdList",
+        Flavor::FileDescriptor => "FileDescriptor",
+        Flavor::FileContents => "FileContents",
+        Flavor::Url => "Url",
+        Flavor::UrlName => "UrlName",
+        Flavor::ShellLink => "ShellLink",
+        Flavor::DropEffect => "DropEffect",
+        _ => "Other",
     }
 }
 

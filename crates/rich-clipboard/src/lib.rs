@@ -127,7 +127,8 @@ pub use fanout::{write_flavors, write_plan, Fidelity, ItemKind, WriteFlavor};
 
 #[cfg(feature = "alloc")]
 pub use decode::{
-    decode, decode_all, decode_payload, decode_payload_with, decode_with, transfer_action, Options,
+    decode, decode_all, decode_payload, decode_payload_policy, decode_payload_with, decode_with,
+    transfer_action, Options,
 };
 #[cfg(feature = "alloc")]
 pub use encode::{encode, encode_with};
