@@ -1,0 +1,7 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "2x1 32bpp BI_RGB BITMAPINFOHEADER with a zero in the fourth byte",
+  "expect": "ok",
+  "notes": "One undefined byte is zero, so the channel is not alpha and both pixels decode fully opaque. This is the case that keeps pasted screenshots from coming out invisible."
+}

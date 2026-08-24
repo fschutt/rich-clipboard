@@ -1,0 +1,7 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "3x2 8bpp palettised, biClrUsed=4, rows padded from 3 to 4 bytes",
+  "expect": "ok",
+  "notes": "The stride pad byte is 0xFF, which is not a valid index into a 4-entry palette; reading it would be an error, so this fixture proves padding is skipped. RGBQUAD entries are stored blue-first."
+}

@@ -1,0 +1,7 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "9x2 1bpp monochrome, 9 pixels spilling into a second byte, stride 4",
+  "expect": "ok",
+  "notes": "Most significant bit is the leftmost pixel. Top row 101010101, bottom row 010101010. The two trailing 0xFF bytes are stride padding."
+}

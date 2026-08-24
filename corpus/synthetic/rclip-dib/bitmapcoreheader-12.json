@@ -1,0 +1,7 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "12-byte BITMAPCOREHEADER (OS/2 1.x / Windows 2.0)",
+  "expect": "error",
+  "notes": "16-bit dimensions and a 3-byte RGBTRIPLE palette; an entirely different layout. Rejected as Unsupported rather than misread as a 40-byte header."
+}

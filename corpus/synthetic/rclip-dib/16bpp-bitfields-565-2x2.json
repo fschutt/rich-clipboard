@@ -1,0 +1,7 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "2x2 16bpp BI_BITFIELDS RGB565 with the three DWORD masks after a 40-byte header",
+  "expect": "ok",
+  "notes": "Pixel data starts at byte 52, not 40. Channels rescale by rounding, so 5-bit 31 and 6-bit 63 both become 255, not 248/252."
+}

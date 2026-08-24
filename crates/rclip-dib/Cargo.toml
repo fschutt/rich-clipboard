@@ -1,0 +1,25 @@
+[package]
+name        = "rclip-dib"
+description = "CF_DIB / CF_DIBV5 packed device-independent bitmaps decoded to RGBA8, and RGBA8 encoded to CF_DIBV5"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[features]
+default = []
+## Enables the owned-output convenience wrappers (`decode`, `encode_v5`).
+alloc = ["rclip-core/alloc"]
+std = ["alloc", "rclip-core/std"]
+
+[dependencies]
+rclip-core = { workspace = true }
+
+# The library is `no_std` and its owned-output helpers sit behind `alloc`, but
+# the integration tests need them. Depending on ourselves with `std` enabled is
+# what makes a plain `cargo test -p rclip-dib` exercise the whole surface
+# instead of quietly skipping half of it.
+[dev-dependencies]
+rclip-dib = { path = ".", features = ["std"] }

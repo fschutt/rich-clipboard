@@ -1,0 +1,7 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "2x1 32bpp BI_RGB BITMAPINFOHEADER where every fourth byte is non-zero",
+  "expect": "ok",
+  "notes": "No alpha mask is declared, but no fourth byte is zero either, so the high byte is taken as alpha: 128 then 255."
+}

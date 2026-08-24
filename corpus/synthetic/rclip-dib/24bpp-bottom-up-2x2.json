@@ -1,0 +1,7 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "2x2 24bpp BI_RGB, positive biHeight so rows are stored bottom-up",
+  "expect": "ok",
+  "notes": "Rows: red,green over blue,white. Stride is 8 (6 colour bytes + 2 pad)."
+}

@@ -193,8 +193,10 @@ pub enum AlphaMode { Straight, Premultiplied, Guess }
 pub fn decode(bytes: &[u8], alpha: AlphaMode) -> Result<RgbaImage, DibError>;
 ```
 
-with `Guess` documented as "heuristic: treat as premultiplied if any pixel has a channel > alpha
-(impossible under premultiplication), else straight." Also: a `BITMAPINFOHEADER` with 32bpp
+with `Guess` documented as "heuristic: a pixel whose colour channel exceeds its alpha is
+unreachable under premultiplication, so seeing one proves the image is *straight*; absent any
+such pixel, assume premultiplied." Note the direction — the evidence is one-sided, and it only
+ever proves straight. Also: a `BITMAPINFOHEADER` with 32bpp
 technically has *no* alpha channel — the 4th byte is undefined — so `CF_DIB` at 32bpp should
 decode opaque unless every alpha byte is nonzero.
 

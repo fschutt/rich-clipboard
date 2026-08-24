@@ -1,0 +1,7 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "2x2 24bpp header with only one of the two pixel rows present",
+  "expect": "error",
+  "notes": "Declares 16 bytes of pixels, supplies 8. Must be UnexpectedEof."
+}

@@ -1,0 +1,7 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "5x2 4bpp palettised with the default 16-entry greyscale palette",
+  "expect": "ok",
+  "notes": "biClrUsed=0 means 1<<4 entries. Top row indices 1,2,3,4,5; bottom row 15,14,13,12,11. 0x12 is index 1 then index 2 - high nibble first."
+}

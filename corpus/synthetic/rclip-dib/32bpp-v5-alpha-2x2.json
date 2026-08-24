@@ -1,0 +1,7 @@
+{
+  "format": "CF_DIBV5",
+  "origin": "synthetic",
+  "description": "2x2 32bpp BITMAPV5HEADER, BI_BITFIELDS, explicit 0xFF000000 alpha mask",
+  "expect": "ok",
+  "notes": "Alpha values 255/128/64/0. The 255,255,255,0 pixel has channels above its alpha, which is impossible under premultiplication, so AlphaMode::Guess must classify this image as straight."
+}

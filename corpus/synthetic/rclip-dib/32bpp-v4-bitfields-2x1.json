@@ -1,0 +1,7 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "2x1 32bpp BITMAPV4HEADER with BI_BITFIELDS masks stored inside the header",
+  "expect": "ok",
+  "notes": "Pixel data starts at byte 108. A decoder that expects three mask DWORDs after the header would start at 120 and run off the end."
+}
