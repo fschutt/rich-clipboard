@@ -1,0 +1,208 @@
+# cargo-fuzz keeps its own nightly-only workspace: `-Z sanitizer` and the
+# `#[no_main]` targets below do not build on stable, and a nightly-only member
+# would poison `cargo build` for the whole repo. The root `Cargo.toml` therefore
+# lists this directory under `[workspace.exclude]`, and this empty `[workspace]`
+# table makes it a workspace root of its own.
+[workspace]
+
+[package]
+name    = "rclip-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+# Every codec is pulled in with `std`, which transitively turns on `alloc`.
+# The point of a fuzz target is to reach as much code as possible, and the
+# owning halves of these crates -- the serializers, the lossy decoders -- are
+# exactly the parts that allocate from attacker-controlled lengths.
+rclip-bookmark      = { path = "../crates/rclip-bookmark",      features = ["std"] }
+rclip-cf-html       = { path = "../crates/rclip-cf-html",       features = ["std"] }
+rclip-codepage      = { path = "../crates/rclip-codepage",      features = ["std"] }
+rclip-core          = { path = "../crates/rclip-core",          features = ["std"] }
+rclip-desktop-entry = { path = "../crates/rclip-desktop-entry", features = ["std"] }
+rclip-dib           = { path = "../crates/rclip-dib",           features = ["std"] }
+rclip-dropfiles     = { path = "../crates/rclip-dropfiles",     features = ["std"] }
+rclip-file-desc     = { path = "../crates/rclip-file-desc",     features = ["std"] }
+rclip-idlist        = { path = "../crates/rclip-idlist",        features = ["std"] }
+rclip-rtf           = { path = "../crates/rclip-rtf",           features = ["std"] }
+rclip-shell-link    = { path = "../crates/rclip-shell-link",    features = ["std"] }
+rclip-uri-list      = { path = "../crates/rclip-uri-list",      features = ["std"] }
+rclip-url-file      = { path = "../crates/rclip-url-file",      features = ["std"] }
+rclip-webloc        = { path = "../crates/rclip-webloc",        features = ["std"] }
+
+[profile.release]
+debug = 1
+
+# ---------------------------------------------------------------------------
+# One target per parser entry point. Several crates have more than one: they
+# are separate formats that happen to share a crate, and merging them into one
+# target would let libFuzzer spend its whole budget on whichever has the
+# shallower magic check.
+# ---------------------------------------------------------------------------
+
+[[bin]]
+name = "codepage_decode"
+path = "fuzz_targets/codepage_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "cf_html_parse"
+path = "fuzz_targets/cf_html_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "uri_list_parse"
+path = "fuzz_targets/uri_list_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "uri_list_copied_files"
+path = "fuzz_targets/uri_list_copied_files.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "uri_list_nautilus_text"
+path = "fuzz_targets/uri_list_nautilus_text.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "uri_list_kde_cut"
+path = "fuzz_targets/uri_list_kde_cut.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dropfiles_parse"
+path = "fuzz_targets/dropfiles_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dib_header"
+path = "fuzz_targets/dib_header.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dib_decode"
+path = "fuzz_targets/dib_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "idlist_itemidlist"
+path = "fuzz_targets/idlist_itemidlist.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "idlist_cida"
+path = "fuzz_targets/idlist_cida.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rtf_parse"
+path = "fuzz_targets/rtf_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rtf_tokenize"
+path = "fuzz_targets/rtf_tokenize.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rtf_document"
+path = "fuzz_targets/rtf_document.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "shell_link_parse"
+path = "fuzz_targets/shell_link_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "file_desc_group"
+path = "fuzz_targets/file_desc_group.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "file_desc_descriptor"
+path = "fuzz_targets/file_desc_descriptor.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "webloc_parse"
+path = "fuzz_targets/webloc_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "webloc_bplist"
+path = "fuzz_targets/webloc_bplist.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "webloc_xml"
+path = "fuzz_targets/webloc_xml.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "url_file_parse"
+path = "fuzz_targets/url_file_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "desktop_entry_parse"
+path = "fuzz_targets/desktop_entry_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "bookmark_parse"
+path = "fuzz_targets/bookmark_parse.rs"
+test = false
+doc = false
+bench = false

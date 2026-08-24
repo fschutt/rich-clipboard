@@ -1,0 +1,125 @@
+# Fuzzing gate. Deliberately separate from ci.yml: cargo-fuzz needs nightly and
+# a sanitizer, neither of which belongs in the stable build matrix.
+#
+# This is a *regression* gate, not a fuzzing campaign. Every target is built and
+# run for a fixed short duration against the checked-in corpus, which is long
+# enough to catch a shallow bug introduced by the commit under test and short
+# enough to keep the job honest. Finding new deep bugs is a job for a long
+# soak run, not for CI.
+name: fuzz
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  # A weekly soak with a much bigger budget, on the same targets. Manual runs
+  # can override the duration.
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: "Seconds to run each target for"
+        required: false
+        default: "60"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    name: build and run every target
+    runs-on: ubuntu-latest
+    # 23 targets; the per-target budget below plus build time has to fit.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          # cargo-fuzz builds with -Zsanitizer=address, which needs the
+          # sanitizer runtimes shipped with rust-src for the host target.
+          components: rust-src
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+
+      - name: install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: seed the corpus from ../corpus
+        run: ./fuzz/seed-corpus.sh
+
+      - name: build every fuzz target
+        working-directory: fuzz
+        run: cargo fuzz build
+
+      # Run each target separately rather than through run-all.sh, so that a
+      # failure names the target in the GitHub UI and the surviving targets
+      # still run. `fail-fast` is off for the same reason: one broken parser
+      # should not hide the state of the others.
+      - name: run every fuzz target
+        working-directory: fuzz
+        env:
+          SECONDS_PER_TARGET: ${{ github.event.inputs.seconds || (github.event_name == 'schedule' && '900' || '60') }}
+        run: |
+          set -uo pipefail
+          targets=$(cargo fuzz list)
+          failed=""
+          for target in $targets; do
+            echo "::group::$target"
+            # -timeout=10: a clipboard parser that spends ten seconds on one
+            # payload is a hang for this repo's purposes, whatever libFuzzer's
+            # default says. This is the half of "no panic and no hang" that
+            # enforces the hang.
+            if ! cargo fuzz run "$target" -- \
+                  -max_total_time="$SECONDS_PER_TARGET" \
+                  -timeout=10 \
+                  -print_final_stats=1; then
+              failed="$failed $target"
+              echo "::error title=fuzz target failed::$target"
+            fi
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then
+            echo "failing targets:$failed"
+            exit 1
+          fi
+
+      # The crashing input is the whole value of a failed run, so it has to
+      # leave the runner. It also has to be *inspected* before it is trusted:
+      # these are parser inputs, not attachments to open.
+      - name: upload crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # Cheap guard against the corpus and the target list drifting apart: a target
+  # with no seeds is a target that is fuzzing from scratch every run, which is
+  # the difference between exercising a parser and exercising its magic check.
+  seeds:
+    name: every target has seeds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: seed and check
+        run: |
+          set -euo pipefail
+          ./fuzz/seed-corpus.sh
+          fail=0
+          for dir in fuzz/corpus/*/; do
+            target=$(basename "$dir")
+            n=$(find "$dir" -type f | wc -l)
+            if [ "$n" -eq 0 ]; then
+              echo "::error::fuzz target $target has no seeds"
+              fail=1
+            else
+              echo "$target: $n seed(s)"
+            fi
+          done
+          exit $fail

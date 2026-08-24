@@ -149,6 +149,15 @@ pub fn parse_detailed(blob: &[u8]) -> Result<Parsed<'_>> {
         (Offset::At(s), Offset::At(e)) => {
             let text = resolve(&r, s, e, body_start)?;
             let (fs, fe) = fragment_range;
+            // Measure against the *clamped* fragment start, exactly as
+            // `resolve` computed it. A `StartFragment` that points inside the
+            // header is raised to the end of the header (see `resolve`), so
+            // `fragment` can be shorter than `fe - fs`; subtracting the
+            // unclamped `fs` here reported a range running past the end of the
+            // very string it is documented to index, and `&fragment[a..b]` --
+            // the one thing this field exists for -- then panicked on a
+            // caller-visible slice of attacker-controlled clipboard bytes.
+            let fs = fs.max(body_start).min(fe);
             let inside = if s >= fs && e <= fe {
                 Some((s - fs, e - fs))
             } else {

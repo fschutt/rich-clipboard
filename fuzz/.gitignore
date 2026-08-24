@@ -1,0 +1,12 @@
+# Build output and libFuzzer's scratch.
+target/
+artifacts/
+coverage/
+
+# Everything under corpus/ is generated except the named regression seeds:
+#   seed-*        copied from ../corpus by ./seed-corpus.sh
+#   <40 hex>      units libFuzzer discovered during a run
+#   regression-*  the minimised input for a bug a run actually found -- these
+#                 are the ones worth committing, and they are kept
+corpus/*/*
+!corpus/*/regression-*
