@@ -13,6 +13,10 @@ default = []
 ## Enables `ShellLinkBuilder` — writing .lnk files — and the lossy string helpers.
 alloc = ["rclip-core/alloc", "rclip-idlist/alloc"]
 std = ["alloc", "rclip-core/std", "rclip-idlist/std"]
+## Decoding ANSI `StringData` through a named legacy code page. Off by default:
+## every link written this century sets `IsUnicode`, so most callers never need
+## the tables. Forwards to `rclip-idlist`, which owns `ShellStr`.
+codepage = ["rclip-idlist/codepage"]
 
 [dependencies]
 rclip-core   = { workspace = true }

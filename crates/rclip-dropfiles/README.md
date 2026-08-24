@@ -72,14 +72,38 @@ Nothing on crates.io parses this structure. Searching `dropfiles` returns no res
   file lists as `CLIPRDR_FILEDESCRIPTOR`, never as `DROPFILES`. Rejected: does not cover this
   format. (See the `rclip-file-desc` README for the verdict on the part it *does* cover.)
 
+## ANSI paths (the `codepage` feature)
+
+**Done** — was `// TODO(phase-1):`. When `fWide == 0` the paths are in the *source machine's*
+ANSI code page, which is not recorded anywhere in the payload. `Path::Ansi` returns the raw
+bytes and `chars()` / `to_string_lossy()` return `None`; that default has not changed, because
+guessing Windows-1252 quietly corrupts every non-Latin path.
+
+The optional, default-off `codepage` feature adds the API for a caller who *knows* the code
+page — from `CF_LOCALE`, from the transport that carried the payload, or from the user:
+
+```rust
+use rclip_dropfiles::{Builder, DropFiles, Encoding};
+
+for path in DropFiles::parse(bytes)?.paths() {
+    path.chars_with(Encoding::Windows1252);          // borrows, allocates nothing
+    path.to_string_with(Encoding::Windows1252)?;     // Err at an undefined byte
+}
+
+// And the write side, which previously had no way to take a `&str` at all:
+let mut b = Builder::ansi();
+b.push_str_encoded("C:\\Grün.txt", Encoding::Windows1252)?;
+```
+
+`push_str_encoded` fails rather than dropping a character the code page cannot represent — a
+silently shortened path names a file that does not exist, and the receiving Explorer has no way
+to tell you why it could not open it. `push_str` still refuses on an ANSI builder: it has no
+code page to encode with.
+
+Fixture: `two-paths-ansi-cp1252.bin`.
+
 ## Not implemented (Phase 0)
 
-- **ANSI decoding.** When `fWide == 0` the paths are in the *source machine's* ANSI codepage,
-  which is not recorded anywhere in the payload. `Path::Ansi` therefore returns the raw bytes,
-  and `chars()` / `to_string_lossy()` return `None` rather than guessing Windows-1252 and
-  quietly corrupting every non-Latin path. `Builder::ansi()` likewise takes bytes you encoded.
-  Marked `// TODO(phase-1):` in the source; a real fix needs the codepage from `CF_LOCALE` or
-  from the platform backend, neither of which exists yet.
 - **Lenient parsing of an unterminated array.** Real captures may turn up payloads whose final
   array NUL was never written. Phase 0 rejects them; whether to add a relaxed entry point is a
   decision for when there is a real capture to look at.

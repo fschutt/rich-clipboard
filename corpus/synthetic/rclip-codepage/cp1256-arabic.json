@@ -1,0 +1,9 @@
+{
+  "format": "single-byte code page text",
+  "origin": "synthetic",
+  "description": "Windows-1256 Arabic",
+  "expect": "ok",
+  "notes": "1256 is the only Windows-125x page in this crate with no undefined byte at all: every one of the 256 values maps.",
+  "expect_decoded": "مرحبا",
+  "expect_codepage": 1256
+}

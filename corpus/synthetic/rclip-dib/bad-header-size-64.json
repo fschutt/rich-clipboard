@@ -3,5 +3,6 @@
   "origin": "synthetic",
   "description": "Header size field of 64, which matches no known BITMAP*HEADER",
   "expect": "error",
+  "error_kind": "Unsupported",
   "notes": "Rounding an unknown size down to the nearest known header would shift the pixel data and produce a skewed image instead of an error."
 }

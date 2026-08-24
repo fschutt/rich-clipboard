@@ -1,0 +1,11 @@
+{
+  "format": "CF_HDROP",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "Two absolute paths with fWide=0, encoded in Windows-1252",
+  "notes": "fWide=0 means the array is in the source machine's ANSI code page, which the payload does not record. 0xDF and 0xFC appear in the names. Path::to_string_lossy returns None here by design; with the `codepage` feature and an encoding the caller names, Path::to_string_with decodes. Read as CP437 the same bytes give different names, which is the failure a default guess would ship.",
+  "expect_paths_cp1252": [
+    "C:\\Berichte\\Jahresabschluß.pdf",
+    "C:\\Fotos\\Grün & Blau.jpg"
+  ]
+}

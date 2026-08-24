@@ -1,0 +1,9 @@
+{
+  "format": "single-byte code page text",
+  "origin": "synthetic",
+  "description": "IBM CP850 accented Latin, the letters 437 lacks",
+  "expect": "ok",
+  "notes": "RTF's \\pca. 850 trades most of 437's box drawing for Western European accents, so the two pages disagree across most of 0xB0-0xDF while sharing 0x80-0xAF.",
+  "expect_decoded": "ÁÉÍÓÚ ñ þ Ð",
+  "expect_codepage": 850
+}

@@ -80,6 +80,33 @@ We wrote our own because the workspace needs a borrowing, allocation-free,
 `no_std` parser that degrades to `Unknown` instead of failing, and no published
 crate is more than two of those four things.
 
+## Code pages (the `codepage` feature)
+
+**Done** — was `// TODO(phase-3)`. `ShellStr::Ansi` holds bytes in the writing
+machine's ANSI code page, which is not recorded in the payload. The default
+behaviour is unchanged and deliberately lossy: `chars()` reports
+`ErrorKind::Unsupported` for every byte at or above `0x80` and `to_string_lossy()`
+substitutes U+FFFD, because a wrong path that looks right is worse than one that
+is visibly lossy.
+
+With the optional, default-off `codepage` feature a caller that *knows* the code
+page — from `CF_LOCALE`, from a `.lnk` `ConsoleFEDataBlock`, from the user — can
+say so:
+
+```rust
+use rclip_idlist::{Encoding, ShellStr};
+
+let name: ShellStr<'_> = /* … */;
+name.chars_with(Encoding::Windows1252);            // borrows, allocates nothing
+name.to_string_with(Encoding::Windows1252)?;       // Err at an undefined byte
+name.to_string_lossy_with(Encoding::Windows1252);  // U+FFFD only where undefined
+```
+
+The feature pulls in `rclip-codepage` (~3 KB of tables) and nothing else; with it
+off, the crate links no tables at all. `file-entry-ansi-cp1252.bin` is the
+fixture: the same name reads `Grüße.txt` under Windows-1252 and `GrьЯe.txt` under
+Windows-1251, which is why the code page is a parameter and never a guess.
+
 ## Not implemented yet
 
 - `// TODO(phase-3)` Signature-based item recognition — MTP devices, control
@@ -95,9 +122,6 @@ crate is more than two of those four things.
   kept as opaque bytes.
 - `// TODO(phase-3)` Extension blocks other than `0xBEEF0004` are located,
   bounded and handed back with their signature and body, but not decoded.
-- `// TODO(phase-3)` Code page tables. `ShellStr::Ansi` bytes at or above `0x80`
-  decode to U+FFFD rather than being guessed at as CP1252 — a wrong path that
-  looks right is worse than one that is visibly lossy.
 - The `alloc` builder only synthesises root folder items. Forging a *file entry*
   PIDL is not a layout problem: the shell binds a PIDL by handing the bytes back
   to the namespace extension that owns them, so a hand-built one resolves to

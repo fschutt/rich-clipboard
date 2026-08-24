@@ -1,0 +1,9 @@
+{
+  "format": "single-byte code page text",
+  "origin": "synthetic",
+  "description": "IBM CP437 box drawing, accents, Greek and shade blocks",
+  "expect": "ok",
+  "notes": "RTF's \\pc. Every byte is defined in 437; the upper half is where DOS kept its line art, which is why a 437 payload read as 1252 becomes accented gibberish.",
+  "expect_decoded": "┌─┐ éè α± ░▒▓",
+  "expect_codepage": 437
+}

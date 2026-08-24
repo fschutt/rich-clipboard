@@ -83,8 +83,8 @@ fn two_wide_paths_decode_including_non_ascii() {
     assert_eq!(
         names,
         [
-            "C:\\Users\\felix\\report.pdf",
-            "C:\\Users\\felix\\Bilder\\föö.png"
+            "C:\\Users\\alice\\report.pdf",
+            "C:\\Users\\alice\\Bilder\\föö.png"
         ]
     );
 }
@@ -368,4 +368,136 @@ fn every_prefix_of_every_fixture_either_parses_or_errors() {
             let _ = DropFiles::parse(&bytes[..len]);
         }
     }
+}
+
+// ----------------------------------------------------------- ANSI code pages
+
+#[test]
+#[cfg(feature = "codepage")]
+fn an_ansi_path_array_decodes_once_the_caller_names_the_code_page() {
+    use rclip_dropfiles::Encoding;
+
+    let bytes = fixture("two-paths-ansi-cp1252.bin");
+    let drop = DropFiles::parse(&bytes).expect("parses");
+    assert!(!drop.is_wide(), "the fixture must have fWide clear");
+
+    let paths: Vec<_> = drop.paths().collect();
+    assert_eq!(paths.len(), 2);
+
+    // The un-named path still refuses, which is the point: the feature adds an
+    // API rather than changing the meaning of an existing one.
+    assert_eq!(
+        paths[0].to_string_lossy(),
+        None,
+        "without a code page there is nothing to decode with"
+    );
+
+    assert_eq!(
+        paths[0]
+            .to_string_with(Encoding::Windows1252)
+            .expect("decodes"),
+        "C:\\Berichte\\Jahresabschluß.pdf"
+    );
+    assert_eq!(
+        paths[1]
+            .to_string_with(Encoding::Windows1252)
+            .expect("decodes"),
+        "C:\\Fotos\\Grün & Blau.jpg"
+    );
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn the_wrong_code_page_yields_a_different_and_equally_plausible_path() {
+    use rclip_dropfiles::Encoding;
+
+    // Nothing in the payload distinguishes these two readings. Both are
+    // well-formed file names; only one names a file that exists. That is the
+    // whole argument for never defaulting.
+    let bytes = fixture("two-paths-ansi-cp1252.bin");
+    let drop = DropFiles::parse(&bytes).expect("parses");
+    let first = drop.paths().next().expect("one path");
+
+    let as_1252 = first
+        .to_string_with(Encoding::Windows1252)
+        .expect("decodes");
+    let as_437 = first.to_string_with(Encoding::Cp437).expect("decodes");
+    assert_ne!(as_1252, as_437);
+    assert!(as_437.starts_with("C:\\Berichte\\Jahresabschlu"));
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn a_wide_path_ignores_the_named_code_page() {
+    use rclip_dropfiles::Encoding;
+
+    let bytes = fixture("two-paths-wide.bin");
+    let drop = DropFiles::parse(&bytes).expect("parses");
+    for path in drop.paths() {
+        assert_eq!(
+            path.to_string_with(Encoding::Cp437).ok(),
+            path.to_string_lossy(),
+            "a wide path decodes as UTF-16 whatever code page is named"
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn the_ansi_builder_can_now_take_a_rust_string() {
+    use rclip_dropfiles::Encoding;
+
+    let mut b = Builder::ansi();
+    b.push_str_encoded("C:\\Grün.txt", Encoding::Windows1252)
+        .expect("1252 has u-umlaut");
+    let payload = b.finish();
+
+    let parsed = DropFiles::parse(&payload).expect("round-trips");
+    assert!(!parsed.is_wide());
+    assert_eq!(
+        parsed
+            .paths()
+            .next()
+            .expect("one path")
+            .to_string_with(Encoding::Windows1252)
+            .expect("decodes"),
+        "C:\\Grün.txt"
+    );
+
+    // push_str still refuses on an ANSI builder: it has no code page.
+    assert_eq!(
+        Builder::ansi().push_str("C:\\a.txt").unwrap_err().kind,
+        ErrorKind::Unsupported
+    );
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn the_ansi_builder_refuses_a_character_the_code_page_lacks() {
+    use rclip_dropfiles::Encoding;
+
+    // Dropping the character silently would produce a payload naming a file
+    // that does not exist, which the receiving Explorer would then fail to
+    // open with no clue why.
+    let mut b = Builder::ansi();
+    let err = b
+        .push_str_encoded("C:\\\u{4E00}.txt", Encoding::Windows1252)
+        .expect_err("a CJK ideograph has no Windows-1252 byte");
+    assert_eq!(err.kind, ErrorKind::Unsupported);
+    assert_eq!(err.offset, 3, "offset is into the path, in bytes");
+    assert_eq!(
+        b.finish().len(),
+        HEADER_LEN + 1,
+        "a rejected path must leave the builder untouched"
+    );
+
+    // And the wide builder rejects the encoded form outright rather than
+    // quietly writing single-byte text into a UTF-16 array.
+    assert_eq!(
+        Builder::wide()
+            .push_str_encoded("C:\\a.txt", Encoding::Windows1252)
+            .unwrap_err()
+            .kind,
+        ErrorKind::Unsupported
+    );
 }

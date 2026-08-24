@@ -3,5 +3,6 @@
   "origin": "synthetic",
   "description": "40-byte header claiming 65536x65536 (2^32 pixels) with no pixel data",
   "expect": "error",
+  "error_kind": "TooLarge",
   "notes": "This is the whole reason MAX_PIXELS exists: a 40-byte input must not be able to ask for a 16 GiB allocation. Must be TooLarge, not a panic and not an allocation attempt."
 }

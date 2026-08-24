@@ -94,6 +94,36 @@ writers emit.
 - **Bounds.** Nesting is capped at `rclip_core::MAX_DEPTH` with a fixed-size stack and a loop.
   There is no recursion in the crate at all, so `{{{{{...` returns `ErrorKind::DepthLimit`.
 
+## Code pages (the `codepage` feature)
+
+**Done** — was `// TODO(phase-1):`. Phase 0 implemented Windows-1252 and Latin-1 and decoded
+everything else to U+FFFD, on the grounds that a wrong guess produces mojibake that looks like
+real text and survives into the user's document while a replacement character is at least
+visibly a gap. That default is unchanged.
+
+The optional, default-off `codepage` feature adds the tables, via `rclip-codepage`:
+
+| RTF keyword | Code page | Now decodes as |
+|---|---|---|
+| `\ansi`, no `\ansicpg` | 1252 (assumed) | Windows-1252 — built in, no feature needed |
+| `\ansicpg819`, `\ansicpg28591` | 819 / 28591 | ISO-8859-1 — built in |
+| `\ansicpgN`, N in 1250–1258 | 1250–1258 | the matching Windows page |
+| `\mac` (or `\ansicpg10000`) | 10000 | Mac OS Roman |
+| `\pc` | 437 | IBM CP437 |
+| `\pca` | 850 | IBM CP850 |
+
+`Codepage::Unsupported(n)` keeps its name and keeps carrying the raw `\ansicpg` number — one
+variant rather than thirteen, so adding an encoding cannot break a caller's `match`, and so a
+page nothing implements is still reported as the number it was. Ask `is_supported()` rather than
+matching on the variant, and `encoding()` for the `rclip-codepage` handle.
+
+Two things the feature does **not** change. A code page nothing implements (KOI8-R, say) still
+decodes to `None`/U+FFFD rather than being approximated. And `is_supported()` never meant
+"decodes every byte": Windows-1253 assigns no character to `0xAA`, so `decode` returns `None`
+there even though the page is fully supported.
+
+Fixtures: `hex-escapes-cp1251.bin`, `mac-charset.bin`, `pc-charset-cp437.bin`.
+
 ## Not implemented in phase 0
 
 - **The writer.** `// TODO(phase-2):` `StyledRun[] -> Vec<u8>` behind `alloc`, emitting a minimal
@@ -105,11 +135,8 @@ writers emit.
 - **Tables, lists, fields and pictures** contribute no structure. Cells are separated by a tab
   and rows by a break so cell text does not run together, but there is no table model.
   `// TODO(phase-1):`
-- **Code pages other than Windows-1252 and Latin-1.** Everything else decodes high bytes to
-  U+FFFD rather than guessing: a wrong guess produces mojibake that looks like real text and
-  survives into the user's document, while a replacement character is at least visibly a gap.
-  `// TODO(phase-1):` Mac Roman (`\mac`), CP437/CP850 (`\pc`/`\pca`), and the CJK code pages Word
-  uses for `\fcharset` fonts.
+- **CJK code pages** for `\fcharset` fonts. Multi-byte and stateful, so they need a different
+  shape of decoder than a 128-entry table. `// TODO(phase-2):`
 - **`\upr`.** The ANSI half is read and the `{\*\ud}` Unicode half skipped — which is exactly the
   behaviour the construct was designed to give old readers, so it is correct but lossy.
   `// TODO(phase-1):` prefer the `\ud` half.

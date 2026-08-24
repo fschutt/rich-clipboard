@@ -1,0 +1,10 @@
+{
+  "format": "single-byte code page text",
+  "origin": "synthetic",
+  "description": "Windows-1253 (Greek) with 0xAA, undefined and outside the C1 range",
+  "expect": "error",
+  "notes": "Must report Malformed at offset 1. 0xAA is undefined in Greek and is NOT in 0x80-0x9F, so even the lenient C1 fallback leaves it undefined. Alpha and Beta on either side prove the decoder does not lose sync afterwards: a single-byte encoding cannot.",
+  "error_kind": "Malformed",
+  "expect_error_offset": 1,
+  "expect_codepage": 1253
+}

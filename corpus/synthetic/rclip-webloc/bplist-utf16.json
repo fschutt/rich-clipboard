@@ -1,6 +1,10 @@
 {
   "format": "webloc",
   "origin": "captured",
+  "os": "macOS 15.5 (24F74)",
+  "app": "plutil (CoreFoundation binary plist writer)",
+  "app_version": "system tool; ships with the OS build above",
+  "how": "Write an XML plist with URL = https://xn--r8jz45g.example/\u30da\u30fc\u30b8 and URLName = \u4f8b\u3048, then plutil -convert binary1. The content is ours and the encoding is Apple's, which is the whole point: the 0x6n UTF-16BE string marker is not something worth hand-building.",
   "description": "Binary plist whose URL and URLName are UTF-16BE (0x6n) strings, written by plutil",
   "expect": "ok",
   "notes": "Serialised by CoreFoundation via `plutil -convert binary1`, so the encoding is Apple's own even though the content is ours. A bplist string is 0x5n ASCII when every character fits in seven bits and 0x6n UTF-16 BIG-endian otherwise - note big-endian, where every Win32 format in this workspace is little-endian, so rclip_core::Utf16Le is the wrong tool. URL is https://xn--r8jz45g.example/\u30da\u30fc\u30b8 and URLName is \u4f8b\u3048."

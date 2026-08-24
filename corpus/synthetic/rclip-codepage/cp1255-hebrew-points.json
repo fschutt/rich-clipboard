@@ -1,0 +1,9 @@
+{
+  "format": "single-byte code page text",
+  "origin": "synthetic",
+  "description": "Windows-1255 Hebrew written with vowel points",
+  "expect": "ok",
+  "notes": "0xC8 (qamats), 0xC9 (holam) and 0xD1 (shin dot) are combining marks: still one byte to one char, but seven chars for four grapheme clusters. A caller truncating by char count here separates a letter from its point.",
+  "expect_decoded": "שָׁלוֹם",
+  "expect_codepage": 1255
+}

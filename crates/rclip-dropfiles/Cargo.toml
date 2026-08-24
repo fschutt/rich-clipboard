@@ -11,11 +11,19 @@ authors.workspace      = true
 [features]
 default = []
 ## Enables the serializer, which must own its output.
-alloc = ["rclip-core/alloc"]
-std = ["alloc", "rclip-core/std"]
+## `rclip-codepage?/alloc` is the weak-dependency form: it turns on that
+## crate's owning helpers only when the `codepage` feature actually pulled it
+## in, so `alloc` alone still links no tables.
+alloc = ["rclip-core/alloc", "rclip-codepage?/alloc"]
+std = ["alloc", "rclip-core/std", "rclip-codepage?/std"]
+## Decoding and encoding the `fWide == 0` path array through a named legacy
+## code page. Off by default: every modern producer sets `fWide`, so most
+## callers never need the tables.
+codepage = ["dep:rclip-codepage"]
 
 [dependencies]
 rclip-core = { workspace = true }
+rclip-codepage = { workspace = true, optional = true }
 
 [dev-dependencies]
 rclip-dropfiles = { path = ".", features = ["std"] }

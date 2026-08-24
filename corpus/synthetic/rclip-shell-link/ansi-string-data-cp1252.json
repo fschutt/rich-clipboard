@@ -1,0 +1,11 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "IsUnicode clear, StringData with Windows-1252 high bytes, and a ConsoleFEDataBlock naming code page 1252",
+  "notes": "The one place a .lnk states a code page numerically is the ConsoleFEDataBlock's CodePage field (MS-SHLLINK 2.5.2), and it is about console display rather than about StringData - so ShellLink::ansi_encoding() is a hint the caller may use, not an authority. NAME_STRING carries 0xDF, RELATIVE_PATH 0xFC, and COMMAND_LINE_ARGUMENTS the 0x93/0x94 curly quotes that are C1 controls in ISO-8859-1. Without the codepage feature every one of those bytes is U+FFFD.",
+  "expect_name_cp1252": "Jahresabschluß",
+  "expect_relative_path_cp1252": ".\\Bericht Grün.txt",
+  "expect_arguments_cp1252": "/quelle:“Buchhaltung”",
+  "expect_console_code_page": 1252
+}

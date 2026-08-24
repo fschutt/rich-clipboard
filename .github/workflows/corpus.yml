@@ -1,0 +1,74 @@
+name: corpus
+
+# The corpus is checked by twelve per-crate sweeps that each look only at their
+# own directory. This workflow is the one that looks at the whole thing: that
+# every fixture is paired, described, routed to a parser and held to the error
+# it claims, and that none of it carries anything off a real machine.
+#
+# Separate from ci.yml on purpose. A red X here means "the corpus is wrong" or
+# "something leaked", which is a different question from "the code is wrong",
+# and the leak job in particular should be legible at a glance.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    # A leak arrives in a commit that touches corpus/ — but a change to the
+    # gate itself can also stop it noticing, so both are triggers.
+    paths:
+      - "corpus/**"
+      - "crates/**"
+      - ".github/workflows/corpus.yml"
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  gate:
+    name: corpus gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: every fixture is paired, described and routed
+        run: cargo test -p rclip-corpus-tests --test corpus_gate -- --nocapture
+      - name: the walker, the sidecar contract and the JSON reader
+        run: cargo test -p rclip-corpus-tests --lib
+
+  leak:
+    name: leak scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: nothing in corpus/ identifies a machine or a person
+        # `--nocapture` so the fixture and allowlist counts land in the log:
+        # a scan that silently stopped covering the corpus looks exactly like a
+        # scan that found nothing.
+        run: cargo test -p rclip-corpus-tests --test leak_scan -- --nocapture
+      - name: the corpus README still documents the redaction policy
+        # The scanner is only half the guard; the other half is the paragraph
+        # that tells a contributor what to do before committing a capture.
+        run: |
+          set -euo pipefail
+          for phrase in "Captured fixtures and redaction" "same byte length" "redacted"; do
+            if ! grep -qF -- "$phrase" corpus/README.md; then
+              echo "::error file=corpus/README.md::the redaction policy no longer mentions '$phrase'"
+              exit 1
+            fi
+          done
+
+  lint:
+    name: fmt + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt -p rclip-corpus-tests --check
+      - run: cargo clippy -p rclip-corpus-tests --all-targets -- -D warnings

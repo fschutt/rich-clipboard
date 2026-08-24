@@ -69,7 +69,12 @@
 //! - **Tables, lists, fields and pictures.** `\trowd`, `\pn`, `\field` and
 //!   `\pict` contribute no structure; the visible text of a field
 //!   (`\fldrslt`) does come through.
-//! - **Code pages other than Windows-1252 and Latin-1.** See [`Codepage`].
+//! - **Code pages other than Windows-1252 and Latin-1** are behind the optional
+//!   `codepage` feature. With it on, `\mac`, `\pc`, `\pca` and every
+//!   `\ansicpgN` naming a Windows-125x page decode through `rclip-codepage`;
+//!   with it off they still yield U+FFFD rather than a guess. The CJK pages
+//!   Word emits for `\fcharset` fonts are multi-byte and out of scope either
+//!   way. See [`Codepage`].
 //! - **`\upr`.** The ANSI half is read and the `{\*\ud}` Unicode half skipped,
 //!   which is the behaviour the construct was designed to give old readers.
 //!   `// TODO(phase-1):` prefer the `\ud` half.
@@ -88,6 +93,10 @@ pub mod token;
 
 pub use codepage::Codepage;
 pub use parse::{header, is_rtf, Header, Parser, RunText, StyledRun};
+/// Re-exported so a caller can name a code page without adding `rclip-codepage`
+/// to its own manifest.
+#[cfg(feature = "codepage")]
+pub use rclip_codepage::Encoding;
 pub use style::{CharProps, Color, Font, FontFamily, RtfChars, RtfText};
 pub use tables::{colors, fonts, generator, ColorTable, FontTable};
 pub use token::{ControlSymbol, Token, Tokenizer};

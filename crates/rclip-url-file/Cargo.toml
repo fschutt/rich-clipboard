@@ -14,6 +14,11 @@ default = []
 ## that must copy.
 alloc = ["rclip-core/alloc"]
 std = ["alloc", "rclip-core/std"]
+## Transcoding a legacy `.url` out of a Windows code page, for the
+## `[InternetShortcut.A]` section. Implies `alloc`: transcoding cannot borrow,
+## the decoded text is not a contiguous slice of the input anywhere.
+codepage = ["alloc", "dep:rclip-codepage", "rclip-codepage/alloc"]
 
 [dependencies]
 rclip-core = { workspace = true }
+rclip-codepage = { workspace = true, optional = true }

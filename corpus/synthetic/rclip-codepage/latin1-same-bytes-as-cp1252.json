@@ -1,0 +1,9 @@
+{
+  "format": "single-byte code page text",
+  "origin": "synthetic",
+  "description": "The cp1252-smart-quotes bytes decoded as ISO-8859-1 instead",
+  "expect": "ok",
+  "notes": "Byte-identical to cp1252-smart-quotes.bin, different codepage argument, entirely different text. The pair exists so a regression that confuses the two fails a test.",
+  "expect_decoded": "café quoted   dash",
+  "expect_codepage": 28591
+}

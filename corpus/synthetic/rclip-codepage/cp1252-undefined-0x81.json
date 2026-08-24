@@ -1,0 +1,10 @@
+{
+  "format": "single-byte code page text",
+  "origin": "synthetic",
+  "description": "Windows-1252 with 0x81, which the code page leaves undefined",
+  "expect": "error",
+  "notes": "Must report Malformed at offset 2 rather than substituting U+FFFD. Windows' own MultiByteToWideChar maps this to U+0081 and so does decode_byte_lenient; decode_byte does not.",
+  "error_kind": "Malformed",
+  "expect_error_offset": 2,
+  "expect_codepage": 1252
+}

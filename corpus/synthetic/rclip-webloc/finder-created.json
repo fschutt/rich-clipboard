@@ -1,6 +1,10 @@
 {
   "format": "webloc",
   "origin": "captured",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Finder",
+  "app_version": "system app; ships with the OS build above",
+  "how": "osascript -e 'tell application \"Finder\" to make new internet location file at POSIX file \"/private/tmp/\" to \"https://example.com/rich-clipboard\" with properties {name:\"Example Link\"}', then read the resulting .webloc data fork. Nothing personal is embedded: the URL and the name are both arguments.",
   "description": "A .webloc written by Finder itself on macOS 15.5 (24F74)",
   "expect": "ok",
   "notes": "Created with: osascript -e 'tell application \"Finder\" to make new internet location file at <folder> to \"https://example.com/rich-clipboard\" with properties {name:\"Example Link\"}'. Finder wrote an XML plist, not a binary one - the binary encoding comes from drag-created weblocs, not from the Finder scripting command. Two things the bytes do not show: the file also carries a com.apple.FinderInfo xattr with type 'ilht' and creator 'MACS', and a resource fork holding the legacy 'url ' resource with the same URL and a 'drag' resource. That resource fork is the pre-OS X variant, out of scope for phase 0."

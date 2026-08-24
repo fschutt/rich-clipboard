@@ -1,0 +1,11 @@
+{
+  "format": ".url InternetShortcut",
+  "origin": "synthetic",
+  "expect": "error",
+  "error_kind": "InvalidUtf8",
+  "description": "A .url whose [InternetShortcut.A] URL= holds Windows-1252 bytes, so the file is not UTF-8",
+  "notes": "parse() refuses the WHOLE file with InvalidUtf8 at the first high byte, not just that one value - which is why the codepage feature transcodes in front of the parser rather than adding a decoding accessor. The [InternetShortcut] URL= is the percent-encoded form of the same URL and is pure ASCII, so it survives transcoding byte for byte: every code page in rclip-codepage is ASCII-transparent.",
+  "expect_error_offset": 141,
+  "expect_ansi_url_cp1252": "https://de.example.com/bücher/grüße",
+  "expect_url": "https://de.example.com/b%C3%BCcher/gr%C3%BC%C3%9Fe"
+}

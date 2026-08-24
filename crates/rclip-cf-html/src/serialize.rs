@@ -39,7 +39,12 @@ use crate::{Version, END_FRAGMENT_COMMENT, START_FRAGMENT_COMMENT};
 const FIELD_WIDTH: usize = 10;
 
 /// Largest value a [`FIELD_WIDTH`]-digit field can hold.
-const FIELD_MAX: usize = 9_999_999_999;
+///
+/// `u64` rather than `usize` because ten digits overflow a 32-bit `usize`, and
+/// a literal that does not fit is a hard compile error rather than a warning —
+/// so typing this as `usize` makes the crate simply not build for a 32-bit
+/// target. Comparisons widen the offset instead.
+const FIELD_MAX: u64 = 9_999_999_999;
 
 /// The default document wrapped around a fragment when no context is given.
 const DEFAULT_CONTEXT: (&str, &str) = ("<html><body>", "</body></html>");
@@ -192,7 +197,7 @@ impl<'a> CfHtmlBuilder<'a> {
         }
         let end_html = buf.len();
 
-        if end_html > FIELD_MAX {
+        if end_html as u64 > FIELD_MAX {
             return Err(Error::new(ErrorKind::TooLarge, end_html));
         }
 
@@ -283,7 +288,7 @@ fn reserve(buf: &mut Vec<u8>, key: &str, placeholder: bool) -> Option<usize> {
 /// `field` is `None` for a `-1` line, which has nothing to patch.
 fn patch(buf: &mut [u8], field: Option<usize>, value: usize) -> Result<()> {
     let Some(at) = field else { return Ok(()) };
-    if value > FIELD_MAX {
+    if value as u64 > FIELD_MAX {
         return Err(Error::new(ErrorKind::TooLarge, value));
     }
     let slot = buf

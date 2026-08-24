@@ -39,6 +39,11 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs, missing_debug_implementations)]
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
+#[cfg(feature = "codepage")]
+pub mod codepage;
 pub mod fields;
 pub mod ini;
 mod lines;
@@ -48,6 +53,10 @@ use rclip_core::{Error, ErrorKind, Reader, Result};
 
 pub use fields::{HotKey, Modified, ShowCommand};
 pub use ini::{Entries, Entry, Section, Sections};
+/// Re-exported so a caller can name a code page without adding `rclip-codepage`
+/// to its own manifest.
+#[cfg(feature = "codepage")]
+pub use rclip_codepage::Encoding;
 pub use shortcut::ShortcutTarget;
 
 /// The section every `.url` has. Compared case-insensitively; see [`ini`].
@@ -55,8 +64,12 @@ pub const SECTION_INTERNET_SHORTCUT: &str = "InternetShortcut";
 
 /// The "ANSI" companion section. Its `URL=` is believed to be the value in the
 /// system code page, but nobody has documented it — the NSIS wiki's own note
-/// reads `[InternetShortcut.A] ; CP_ACP stuff?`. This crate hands the value
-/// back verbatim and decodes nothing.
+/// reads `[InternetShortcut.A] ; CP_ACP stuff?`. [`UrlFile::url_ansi`] hands the
+/// value back verbatim and decodes nothing.
+///
+/// A file that actually uses this section is not UTF-8, so [`parse`] refuses it
+/// outright. The `codepage` feature's `codepage` module is the way in: transcode
+/// the bytes with a code page the caller names, then parse.
 pub const SECTION_INTERNET_SHORTCUT_A: &str = "InternetShortcut.A";
 
 /// The "wide" companion section. Same story: the NSIS wiki guesses

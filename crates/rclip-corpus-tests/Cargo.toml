@@ -1,0 +1,34 @@
+[package]
+name        = "rclip-corpus-tests"
+description = "Whole-corpus gate: sidecar contract, parser routing, and the leak scanner. Not published."
+publish     = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+# No dependencies. The library half is a corpus walker, a ~200-line JSON reader
+# and a byte scanner; all three are std-only on purpose, so that the thing which
+# guards the corpus cannot itself be the thing that drags a dependency tree into
+# a workspace whose codecs have none. See README.md.
+[dependencies]
+
+# The codec crates, one per corpus directory, so that every fixture can be run
+# through the parser that owns it. `std` because these are tests.
+[dev-dependencies]
+rclip-core = { workspace = true, features = ["std"] }
+rclip-bookmark = { workspace = true, features = ["std"] }
+rclip-cf-html = { workspace = true, features = ["std"] }
+rclip-codepage = { workspace = true, features = ["std"] }
+rclip-desktop-entry = { workspace = true, features = ["std"] }
+rclip-dib = { workspace = true, features = ["std"] }
+rclip-dropfiles = { workspace = true, features = ["std"] }
+rclip-file-desc = { workspace = true, features = ["std"] }
+rclip-idlist = { workspace = true, features = ["std"] }
+rclip-rtf = { workspace = true, features = ["std"] }
+rclip-shell-link = { workspace = true, features = ["std"] }
+rclip-uri-list = { workspace = true, features = ["std"] }
+rclip-url-file = { workspace = true, features = ["std"] }
+rclip-webloc = { workspace = true, features = ["std"] }

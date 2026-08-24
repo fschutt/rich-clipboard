@@ -1,0 +1,120 @@
+[package]
+name        = "rich-clipboard"
+description = "Typed clipboard and drag-and-drop payloads: decode what a source offered, and publish the right set of flavors back"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[features]
+# `std` on by default because this is the crate a consumer depends on, and a
+# consumer that wanted `no_std` will say so. Every *format* is off by default:
+# an application that pastes text and images must not be made to compile a
+# `.lnk` parser to do it.
+default = ["std"]
+
+## Owned output. Everything above the flavor tables needs an allocator — a
+## decoded item owns its strings and pixels — so without this the crate is the
+## write-side policy tables and nothing else.
+alloc = [
+    "rclip-core/alloc",
+    "rclip-bookmark?/alloc",
+    "rclip-cf-html?/alloc",
+    "rclip-desktop-entry?/alloc",
+    "rclip-dib?/alloc",
+    "rclip-dropfiles?/alloc",
+    "rclip-file-desc?/alloc",
+    "rclip-idlist?/alloc",
+    "rclip-rtf?/alloc",
+    "rclip-shell-link?/alloc",
+    "rclip-uri-list?/alloc",
+    "rclip-url-file?/alloc",
+    "rclip-webloc?/alloc",
+]
+## `std::error::Error` for [`Error`], and nothing else. The door to `no_std +
+## alloc` stays open because azul targets wasm; see `plan/PLAN.md` §8.2.
+std = [
+    "alloc",
+    "rclip-core/std",
+    "rclip-bookmark?/std",
+    "rclip-cf-html?/std",
+    "rclip-desktop-entry?/std",
+    "rclip-dib?/std",
+    "rclip-dropfiles?/std",
+    "rclip-file-desc?/std",
+    "rclip-idlist?/std",
+    "rclip-rtf?/std",
+    "rclip-shell-link?/std",
+    "rclip-uri-list?/std",
+    "rclip-url-file?/std",
+    "rclip-webloc?/std",
+]
+
+## `CF_HTML` / `public.html` / `text/html`.
+html = ["dep:rclip-cf-html"]
+## Rich Text Format — the read leg of the `RichText` hub on macOS.
+rtf = ["dep:rclip-rtf"]
+## `CF_DIB` / `CF_DIBV5` raster images.
+dib = ["dep:rclip-dib"]
+## A list of files, in both of its wire forms: `CF_HDROP` on Windows and
+## `text/uri-list` plus the GNOME/KDE cut conventions everywhere else. One
+## feature, because "a file list" is one flavor with two encodings and a
+## consumer that wants it wants it on every platform it ships to.
+file-list = ["dep:rclip-dropfiles", "dep:rclip-uri-list"]
+## `CFSTR_SHELLIDLIST` — Windows shell namespace objects.
+id-list = ["dep:rclip-idlist"]
+## `.lnk` shell links. Pulls `id-list`: a link's authoritative target *is* an
+## `ITEMIDLIST`.
+shell-link = ["dep:rclip-shell-link", "id-list"]
+## `CFSTR_FILEDESCRIPTORW` — virtual / promised files.
+file-desc = ["dep:rclip-file-desc"]
+## Windows `.url` `[InternetShortcut]` files.
+url-file = ["dep:rclip-url-file"]
+## macOS `.webloc` / `.inetloc` files.
+webloc = ["dep:rclip-webloc"]
+## macOS `BookmarkData` — the alias record that survives a file being moved.
+bookmark = ["dep:rclip-bookmark"]
+## freedesktop `.desktop` entries, including `Type=Link`.
+desktop-entry = ["dep:rclip-desktop-entry"]
+
+## Both legs of the styled-text hub.
+rich-text = ["html", "rtf"]
+## The four spellings of "a file that points somewhere".
+shortcut = ["url-file", "webloc", "desktop-entry", "bookmark"]
+## Every format.
+full = [
+    "rich-text",
+    "dib",
+    "file-list",
+    "id-list",
+    "shell-link",
+    "file-desc",
+    "shortcut",
+]
+
+[dependencies]
+rclip-core = { workspace = true }
+
+rclip-bookmark      = { workspace = true, optional = true }
+rclip-cf-html       = { workspace = true, optional = true }
+rclip-desktop-entry = { workspace = true, optional = true }
+rclip-dib           = { workspace = true, optional = true }
+rclip-dropfiles     = { workspace = true, optional = true }
+rclip-file-desc     = { workspace = true, optional = true }
+rclip-idlist        = { workspace = true, optional = true }
+rclip-rtf           = { workspace = true, optional = true }
+rclip-shell-link    = { workspace = true, optional = true }
+rclip-uri-list      = { workspace = true, optional = true }
+rclip-url-file      = { workspace = true, optional = true }
+rclip-webloc        = { workspace = true, optional = true }
+
+# Deliberately no self dev-dependency. The other crates in this workspace use
+# one to turn `alloc` on for their own tests; doing it here would turn every
+# format feature on for `cargo test -p rich-clipboard`, and the whole point of
+# that command is to prove the crate still works with all of them off.
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

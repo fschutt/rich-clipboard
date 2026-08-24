@@ -1,0 +1,9 @@
+{
+  "format": "single-byte code page text",
+  "origin": "synthetic",
+  "description": "Windows-1251 Cyrillic",
+  "expect": "ok",
+  "notes": "The whole alphabet sits at 0xC0-0xFF. 0x98 is this page's only undefined byte and is deliberately absent here.",
+  "expect_decoded": "Привет, мир",
+  "expect_codepage": 1251
+}

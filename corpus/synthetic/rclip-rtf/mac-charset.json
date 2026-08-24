@@ -1,0 +1,9 @@
+{
+  "format": "RTF 1.9.1",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "\\mac charset keyword with Mac OS Roman \\'hh bytes",
+  "notes": "\\mac selects code page 10000 without an \\ansicpg to say so, which is why header() reports Codepage::Unsupported(10000): the number is what the file gives. 0x8E is e-acute, 0xD1 an em dash and 0xDB the euro sign - 0xDB was CURRENCY SIGN before Mac OS 8.5. Read as Windows-1252 the em dash becomes an N-tilde.",
+  "expect_text_with_codepage": "Café — €",
+  "expect_codepage_number": 10000
+}

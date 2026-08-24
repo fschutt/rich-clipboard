@@ -1,0 +1,25 @@
+[package]
+name        = "rclip-codepage"
+description = "Legacy single-byte code page tables: Windows-125x, Mac OS Roman, CP437/CP850, ISO-8859-1"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[features]
+default = []
+## Enables the owning helpers: decoding a whole slice to a `String`, encoding a
+## `&str` back to code page bytes. The `char` iterators need neither.
+alloc = ["rclip-core/alloc"]
+std = ["alloc", "rclip-core/std"]
+
+[dependencies]
+rclip-core = { workspace = true }
+
+# Self dev-dependency so `cargo test -p rclip-codepage` exercises the `alloc`
+# half without making `alloc` a default feature. Cargo permits dev-dependency
+# cycles; `cargo build --no-default-features` is unaffected.
+[dev-dependencies]
+rclip-codepage = { path = ".", features = ["std"] }

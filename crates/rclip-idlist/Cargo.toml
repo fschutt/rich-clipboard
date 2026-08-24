@@ -11,11 +11,18 @@ authors.workspace      = true
 [features]
 default = []
 ## Enables the `ItemIdListBuilder` and the lossy string/path helpers.
-alloc = ["rclip-core/alloc"]
-std = ["alloc", "rclip-core/std"]
+## `rclip-codepage?/alloc` is the weak-dependency form: it turns on that
+## crate's owning helpers only when the `codepage` feature actually pulled it
+## in, so `alloc` alone still links no tables.
+alloc = ["rclip-core/alloc", "rclip-codepage?/alloc"]
+std = ["alloc", "rclip-core/std", "rclip-codepage?/std"]
+## Decoding `ShellStr::Ansi` through a named legacy code page. Off by default:
+## a caller that only ever sees Unicode shell items should not link the tables.
+codepage = ["dep:rclip-codepage"]
 
 [dependencies]
 rclip-core = { workspace = true }
+rclip-codepage = { workspace = true, optional = true }
 
 # A dev-dependency on this crate itself, so that `cargo test -p rclip-idlist`
 # builds the integration tests with `std` on. The tests exercise the `alloc`

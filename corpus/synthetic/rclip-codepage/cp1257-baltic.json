@@ -1,0 +1,9 @@
+{
+  "format": "single-byte code page text",
+  "origin": "synthetic",
+  "description": "Windows-1257 Baltic: Latvian, Lithuanian and Estonian place names",
+  "expect": "ok",
+  "notes": "1257 leaves twelve bytes undefined, two of them (0xA1, 0xA5) outside the C1 range; this fixture uses none of them.",
+  "expect_decoded": "Rīga Šiauliai Tõrva",
+  "expect_codepage": 1257
+}

@@ -1,0 +1,9 @@
+{
+  "format": "single-byte code page text",
+  "origin": "synthetic",
+  "description": "Windows-1258 Vietnamese, tone marks as separate combining characters",
+  "expect": "ok",
+  "notes": "0xEC is U+0301 (acute) and 0xF2 is U+0323 (dot below); 0xEA is a precomposed circumflex e. So the decoded text is partially decomposed and does not compare equal to its NFC form - the trap for any caller that round-trips through a normalizing layer.",
+  "expect_decoded": "Tiếng Việt",
+  "expect_codepage": 1258
+}

@@ -114,6 +114,11 @@ pub use write::ShellLinkBuilder;
 /// to name the type a string field comes back as.
 pub use rclip_idlist::ShellStr;
 
+/// Re-exported for the same reason: naming the code page an ANSI `StringData`
+/// field is in should not need a second dependency in the caller's manifest.
+#[cfg(feature = "codepage")]
+pub use rclip_idlist::Encoding;
+
 use rclip_core::{Reader, Result};
 
 /// A parsed shell link, borrowing from the buffer it was parsed from.
@@ -196,6 +201,37 @@ impl<'a> ShellLink<'a> {
         self.extra_data()
             .map_while(Result::ok)
             .find(|b| b.signature() == signature)
+    }
+
+    /// The `CodePage` from a `ConsoleFEDataBlock`, if the link carries one.
+    ///
+    /// MS-SHLLINK 2.5.2. This is the only place a shell link states a code page
+    /// as a number, which makes it the closest thing available to an answer for
+    /// "what encoding is the ANSI `StringData` in" — but it is not that
+    /// question's answer. The block describes how to display *console* text for
+    /// a target that runs in a console, and a link can carry ANSI strings with
+    /// no such block at all. Treat it as a hint from the writing machine, not
+    /// as authority.
+    #[must_use]
+    pub fn console_code_page(&self) -> Option<u32> {
+        match self.find_extra(extra::SIG_CONSOLE_FE) {
+            Some(ExtraDataBlock::ConsoleFe { code_page }) => Some(code_page),
+            _ => None,
+        }
+    }
+
+    /// [`Self::console_code_page`] resolved to an encoding, when it names a
+    /// single-byte code page this workspace implements.
+    ///
+    /// `None` covers three different situations that the caller may want to
+    /// distinguish by calling [`Self::console_code_page`] directly: no
+    /// `ConsoleFEDataBlock`, a multi-byte code page (932, 936, 950 — a
+    /// single-byte table applied to those produces confident garbage), or a
+    /// number nothing recognises.
+    #[cfg(feature = "codepage")]
+    #[must_use]
+    pub fn ansi_encoding(&self) -> Option<Encoding> {
+        Encoding::from_windows_codepage(self.console_code_page()?)
     }
 
     /// The target as an environment-variable path, e.g.

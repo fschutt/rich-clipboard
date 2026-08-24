@@ -876,3 +876,95 @@ fn a_written_link_survives_a_round_trip_through_its_own_bytes() {
         "reading and writing must be exact inverses here"
     );
 }
+
+// -------------------------------------------------------- ANSI code pages
+
+#[test]
+fn the_console_fe_block_names_a_code_page() {
+    // The one numeric code page a .lnk can carry. Available with or without the
+    // `codepage` feature, because it is a field and not a decoding.
+    let buf = fixture("ansi-string-data-cp1252.bin");
+    let link = ShellLink::parse(&buf).expect("parses");
+    assert_eq!(link.console_code_page(), Some(1252));
+
+    let plain = fixture("ansi-string-data.bin");
+    let link = ShellLink::parse(&plain).expect("parses");
+    assert_eq!(
+        link.console_code_page(),
+        None,
+        "a link with no ConsoleFEDataBlock names no code page, and must not \
+         invent one"
+    );
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn ansi_string_data_decodes_with_a_named_code_page() {
+    use rclip_shell_link::Encoding;
+
+    let buf = fixture("ansi-string-data-cp1252.bin");
+    let link = ShellLink::parse(&buf).expect("parses");
+    assert!(
+        !link.header.link_flags.is_unicode(),
+        "the fixture must have IsUnicode clear or it exercises nothing"
+    );
+
+    let enc = link
+        .ansi_encoding()
+        .expect("the ConsoleFEDataBlock names 1252");
+    assert_eq!(enc, Encoding::Windows1252);
+
+    let name = link.string_data.name.expect("NAME_STRING present");
+    assert_eq!(name.to_string_with(enc).expect("decodes"), "Jahresabschluß");
+
+    let rel = link
+        .string_data
+        .relative_path
+        .expect("RELATIVE_PATH present");
+    assert_eq!(
+        rel.to_string_with(enc).expect("decodes"),
+        ".\\Bericht Grün.txt"
+    );
+
+    // 0x93/0x94 are curly quotes in Windows-1252 and C1 controls in Latin-1.
+    let args = link.string_data.arguments.expect("ARGUMENTS present");
+    assert_eq!(
+        args.to_string_with(enc).expect("decodes"),
+        "/quelle:\u{201C}Buchhaltung\u{201D}"
+    );
+    assert_eq!(
+        args.to_string_with(Encoding::Iso8859_1).expect("decodes"),
+        "/quelle:\u{0093}Buchhaltung\u{0094}",
+        "same bytes, different code page, different text: this is why the code \
+         page is never guessed"
+    );
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn without_a_code_page_the_high_bytes_are_still_a_hole() {
+    // The feature adds an API; it does not change the default behaviour of one.
+    let buf = fixture("ansi-string-data-cp1252.bin");
+    let link = ShellLink::parse(&buf).expect("parses");
+    let name = link.string_data.name.expect("NAME_STRING present");
+    assert_eq!(name.to_string_lossy(), "Jahresabschlu\u{FFFD}");
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn a_multibyte_console_code_page_does_not_resolve_to_a_single_byte_table() {
+    // 932 is Shift-JIS. Reporting it as a single-byte encoding would decode
+    // every lead byte as a character of its own, which is the failure mode this
+    // returns None to avoid.
+    let mut buf = fixture("ansi-string-data-cp1252.bin");
+    let at = buf.len() - 8;
+    buf[at..at + 4].copy_from_slice(&932u32.to_le_bytes());
+
+    let link = ShellLink::parse(&buf).expect("parses");
+    assert_eq!(link.console_code_page(), Some(932));
+    assert_eq!(
+        link.ansi_encoding(),
+        None,
+        "a DBCS code page must not resolve to a single-byte table"
+    );
+}

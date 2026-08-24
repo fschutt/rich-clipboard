@@ -40,6 +40,15 @@ jobs:
             if [ "$name" = "rich-clipboard" ]; then continue; fi
             echo "::group::$name"
             cargo build -p "$name" --no-default-features --target thumbv7em-none-eabi
+            # Also with alloc: thumbv7em is 32-bit, and code behind the alloc
+            # feature is otherwise never built for a 32-bit target at all. That
+            # gap hid a ten-digit usize literal in rclip-cf-html that simply
+            # does not compile where usize is 32 bits.
+            if cargo metadata --no-deps --format-version 1 \
+                 | grep -q "\"$name\".*\"alloc\""; then
+              cargo build -p "$name" --no-default-features --features alloc \
+                --target thumbv7em-none-eabi
+            fi
             echo "::endgroup::"
           done
 

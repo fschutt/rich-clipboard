@@ -1,0 +1,9 @@
+{
+  "format": "single-byte code page text",
+  "origin": "synthetic",
+  "description": "Windows-1250 Czech pangram fragment",
+  "expect": "ok",
+  "notes": "Exercises 0xC0-0xFF, where 1250 assigns entirely different letters to the same byte values 1252 uses for Western accents.",
+  "expect_decoded": "Příliš žluťoučký kůň",
+  "expect_codepage": 1250
+}

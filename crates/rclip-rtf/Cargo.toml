@@ -14,9 +14,15 @@ default = []
 ## never needs it; only text that `\uN` / `\'hh` escapes made non-contiguous does.
 alloc = ["rclip-core/alloc"]
 std = ["alloc", "rclip-core/std"]
+## Decoding `\'hh` bytes under a code page other than Windows-1252 or Latin-1:
+## `\ansicpgN` for any N `rclip-codepage` implements, plus `\mac` (10000),
+## `\pc` (437) and `\pca` (850). Off by default: clipboard RTF is almost always
+## `\ansicpg1252`, which needs no tables.
+codepage = ["dep:rclip-codepage"]
 
 [dependencies]
 rclip-core = { workspace = true }
+rclip-codepage = { workspace = true, optional = true }
 
 ## Self dev-dependency so `cargo test -p rclip-rtf` exercises the `alloc` half
 ## of the crate too, without making `alloc` a default feature. Cargo permits

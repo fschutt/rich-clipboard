@@ -1,0 +1,8 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "One 0x32 file entry whose primary name is code page bytes, not UTF-16",
+  "notes": "Class 0x32 has FILE_ENTRY_UNICODE clear, so the name is in the writing machine's ANSI code page. 'Gr\\u00fc\\u00dfe.txt' in Windows-1252 puts 0xFC and 0xDF in the name; without a code page those two bytes are undecodable and ShellStr::chars reports Unsupported for each. With the `codepage` feature and Encoding::Windows1252 they decode. Decoded as Windows-1251 the same bytes read 'GrьЯe.txt', which is why the code page is named by the caller and never guessed.",
+  "expect_ansi_name_cp1252": "Grüße.txt"
+}

@@ -596,12 +596,27 @@ fn hex_escapes_decode_through_windows_1252() {
     );
 }
 
+/// Gated on the feature being *off*, not weakened: this is the Phase 0
+/// contract and it still holds in the default build. The `codepage` feature
+/// exists precisely to turn 10000 from "no table" into "Mac OS Roman", and the
+/// companion test below asserts the other half.
 #[test]
+#[cfg(not(feature = "codepage"))]
 fn unsupported_codepage_is_lossy_not_wrong() {
     // A wrong guess produces mojibake that looks like text and survives into
     // the user's document; U+FFFD is at least visibly a gap.
     let src = b"{\\rtf1\\mac\\ansicpg10000 caf\\'8e}";
     assert_eq!(text_of(src), "caf\u{FFFD}");
+    assert_eq!(header(src).unwrap().codepage, Codepage::Unsupported(10000));
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn a_code_page_with_a_table_decodes_where_phase_0_substituted() {
+    // Same input as the test above. The header still reports the number the
+    // file gave; only the decoding changed.
+    let src = b"{\\rtf1\\mac\\ansicpg10000 caf\\'8e}";
+    assert_eq!(text_of(src), "caf\u{E9}");
     assert_eq!(header(src).unwrap().codepage, Codepage::Unsupported(10000));
 }
 
@@ -994,4 +1009,92 @@ fn table_cells_do_not_run_together() {
         "a1\tb1\t\nafter",
         "a tab between cells, a break between rows"
     );
+}
+
+// ---------------------------------------------------------- code pages
+
+#[test]
+fn a_code_page_with_no_table_still_refuses_to_guess() {
+    // 20866 is KOI8-R, which `rclip-codepage` does not implement. Whether or
+    // not the `codepage` feature is on, an unimplemented page must produce
+    // U+FFFD and not a plausible-looking wrong letter.
+    assert_eq!(Codepage::from_ansicpg(20866), Codepage::Unsupported(20866));
+    assert!(!Codepage::Unsupported(20866).is_supported());
+    assert_eq!(Codepage::Unsupported(20866).decode(0xC1), None);
+    // ASCII is ASCII in every code page, even one with no table.
+    assert_eq!(Codepage::Unsupported(20866).decode(b'a'), Some('a'));
+}
+
+#[test]
+#[cfg(not(feature = "codepage"))]
+fn without_the_feature_a_non_1252_page_is_a_row_of_replacement_chars() {
+    let src = fixture("hex-escapes-cp1251.bin");
+    assert_eq!(text_of(&src), "\u{FFFD}".repeat(6) + "!");
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn ansicpg_resolves_through_the_code_page_tables() {
+    let src = fixture("hex-escapes-cp1251.bin");
+    assert_eq!(text_of(&src), "Привет!");
+
+    // The header still reports the raw number the file gave: the variant is
+    // where the `\ansicpg` parameter is kept, not a verdict on it.
+    assert_eq!(header(&src).unwrap().codepage, Codepage::Unsupported(1251));
+    assert!(Codepage::Unsupported(1251).is_supported());
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn mac_pc_and_pca_are_charset_keywords_with_no_ansicpg_to_explain_them() {
+    // `\mac`, `\pc` and `\pca` name a code page without a number in the file,
+    // which is why the parser has to carry the mapping itself.
+    let src = fixture("mac-charset.bin");
+    assert_eq!(header(&src).unwrap().codepage, Codepage::Unsupported(10000));
+    assert_eq!(text_of(&src), "Café — €");
+
+    let src = fixture("pc-charset-cp437.bin");
+    assert_eq!(header(&src).unwrap().codepage, Codepage::Unsupported(437));
+    assert_eq!(text_of(&src), "45 ± 3 ≥ 40");
+
+    assert_eq!(
+        Codepage::Unsupported(850).encoding(),
+        Some(rclip_rtf::Encoding::Cp850),
+        "\\pca is 850, and it is not the same table as \\pc"
+    );
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn the_same_hex_escapes_read_differently_under_a_different_ansicpg() {
+    // 'Ïðèâåò!' is well-formed Latin text. Nothing in the bytes says which
+    // reading was meant; only `\ansicpg` does, which is why the parser follows
+    // it rather than sniffing.
+    const CYRILLIC_BYTES: [u8; 6] = [0xCF, 0xF0, 0xE8, 0xE2, 0xE5, 0xF2];
+    let as_1252: String = CYRILLIC_BYTES
+        .iter()
+        .map(|&b| Codepage::Windows1252.decode_lossy(b))
+        .collect();
+    let as_1251: String = CYRILLIC_BYTES
+        .iter()
+        .map(|&b| Codepage::from_ansicpg(1251).decode_lossy(b))
+        .collect();
+    assert_eq!(as_1252, "Ïðèâåò");
+    assert_eq!(as_1251, "Привет");
+    assert_eq!(
+        text_of(&fixture("hex-escapes-cp1251.bin")),
+        format!("{as_1251}!"),
+        "the parser follows \\ansicpg rather than sniffing"
+    );
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn an_undefined_byte_in_a_supported_page_is_still_not_a_character() {
+    // Supported does not mean total: Windows-1253 assigns nothing to 0xAA.
+    let cp = Codepage::from_ansicpg(1253);
+    assert!(cp.is_supported());
+    assert_eq!(cp.decode(0xAA), None);
+    assert_eq!(cp.decode_lossy(0xAA), '\u{FFFD}');
+    assert_eq!(cp.decode(0xC1), Some('Α'), "Greek capital alpha");
 }

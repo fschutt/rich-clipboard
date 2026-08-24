@@ -126,9 +126,11 @@ mod with_alloc {
         /// replacement character. That is deliberate: silently pretending the
         /// code page was Latin-1 produces a path that looks right and is wrong,
         /// which is worse than one that is visibly lossy.
-        // TODO(phase-3): an optional code page table (CP1252 at minimum, then
-        // the CJK pages) behind a feature, for callers that captured the
-        // originating locale.
+        ///
+        /// A caller that knows the code page wants `to_string_lossy_with`
+        /// instead, behind the `codepage` feature: it substitutes only where
+        /// the named page is genuinely undefined rather than everywhere above
+        /// `0x7F`.
         #[must_use]
         pub fn to_string_lossy(&self) -> String {
             let mut out = String::new();
@@ -139,3 +141,94 @@ mod with_alloc {
         }
     }
 }
+
+#[cfg(feature = "codepage")]
+mod with_codepage {
+    #[cfg(feature = "alloc")]
+    extern crate alloc;
+
+    use rclip_codepage::{Decoder, Encoding};
+    use rclip_core::{utf16::Utf16Le, Error};
+
+    use super::ShellStr;
+
+    impl<'a> ShellStr<'a> {
+        /// Decode to `char`s, naming the code page the ANSI half is in.
+        ///
+        /// This is the answer to the question [`ShellStr::chars`] refuses to
+        /// answer. The code page still is not in the payload — it never will
+        /// be — but a caller that learned it from `CF_LOCALE`, from a `.lnk`
+        /// `ConsoleFEDataBlock`, or from the user can now say so, and the
+        /// bytes above `0x7F` stop being a hole.
+        ///
+        /// An undefined byte still yields an error rather than U+FFFD, and
+        /// iteration continues past it: a single-byte code page cannot lose
+        /// sync. `ansi` is ignored for a [`ShellStr::Utf16`] field.
+        #[must_use]
+        pub const fn chars_with(&self, ansi: Encoding) -> ShellCharsWith<'a> {
+            match *self {
+                Self::Ansi(b) => ShellCharsWith::Ansi(ansi.decode(b)),
+                Self::Utf16(b) => ShellCharsWith::Utf16(Utf16Le::new(b)),
+            }
+        }
+
+        /// Decode with a named code page, failing on anything undecodable.
+        ///
+        /// # Errors
+        ///
+        /// [`ErrorKind::Malformed`](rclip_core::ErrorKind::Malformed) at a byte
+        /// the code page leaves undefined,
+        /// [`ErrorKind::InvalidUtf16`](rclip_core::ErrorKind::InvalidUtf16) for
+        /// a lone surrogate in a Unicode field. Offsets are into the field, not
+        /// into the original payload.
+        #[cfg(feature = "alloc")]
+        pub fn to_string_with(&self, ansi: Encoding) -> rclip_core::Result<alloc::string::String> {
+            let mut out = alloc::string::String::new();
+            for c in self.chars_with(ansi) {
+                out.push(c?);
+            }
+            Ok(out)
+        }
+
+        /// Decode with a named code page, substituting U+FFFD.
+        ///
+        /// Unlike [`ShellStr::to_string_lossy`], which replaces *every* byte
+        /// above `0x7F`, this replaces only the ones the named code page leaves
+        /// undefined.
+        #[cfg(feature = "alloc")]
+        #[must_use]
+        pub fn to_string_lossy_with(&self, ansi: Encoding) -> alloc::string::String {
+            let mut out = alloc::string::String::new();
+            for c in self.chars_with(ansi) {
+                out.push(c.unwrap_or('\u{FFFD}'));
+            }
+            out
+        }
+    }
+
+    /// Iterator over the `char`s of a [`ShellStr`] decoded with a named code
+    /// page. Returned by [`ShellStr::chars_with`].
+    #[derive(Debug, Clone)]
+    pub enum ShellCharsWith<'a> {
+        #[doc(hidden)]
+        Ansi(Decoder<'a>),
+        #[doc(hidden)]
+        Utf16(Utf16Le<'a>),
+    }
+
+    impl Iterator for ShellCharsWith<'_> {
+        type Item = Result<char, Error>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            match self {
+                Self::Ansi(it) => it.next(),
+                Self::Utf16(it) => it.next(),
+            }
+        }
+    }
+
+    impl core::iter::FusedIterator for ShellCharsWith<'_> {}
+}
+
+#[cfg(feature = "codepage")]
+pub use with_codepage::ShellCharsWith;

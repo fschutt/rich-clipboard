@@ -128,6 +128,36 @@ hand-rolled `FILETIME`-to-calendar conversion confused the 1601 and 1970 epochs.
 The `time 0.1` dependency is gone; `FileTime` is a raw `u64` of 100 ns ticks with
 `unix_seconds()` for callers who want a date, and no date dependency.
 
+## Reading ANSI `StringData` (the `codepage` feature)
+
+**Done** — was deferred in Phase 0. With `IsUnicode` clear, all five
+`StringData` fields are bytes in the writing machine's ANSI code page, and the
+file does not say which. The default is unchanged and deliberately lossy:
+`ShellStr::to_string_lossy` turns every byte at or above `0x80` into U+FFFD
+rather than assuming Windows-1252 and handing back a plausible wrong path.
+
+The optional, default-off `codepage` feature (which forwards to
+`rclip-idlist/codepage`) lets a caller that knows the code page say so:
+
+```rust
+use rclip_shell_link::{Encoding, ShellLink};
+
+let link = ShellLink::parse(bytes)?;
+let enc = link.ansi_encoding().unwrap_or(Encoding::Windows1252);
+let name = link.string_data.name.map(|s| s.to_string_with(enc));
+```
+
+`ShellLink::console_code_page()` (available with or without the feature) returns
+the `CodePage` field of a `ConsoleFEDataBlock` — the only numeric code page a
+`.lnk` can carry. Treat it as a **hint**: MS-SHLLINK 2.5.2 defines it as how to
+display console text for a target that runs in a console, not as the encoding of
+`StringData`, and most ANSI links have no such block at all.
+`ansi_encoding()` resolves it through `rclip-codepage` and returns `None` for a
+multi-byte page such as 932, because a single-byte table applied to Shift-JIS
+produces confident garbage rather than an error.
+
+Fixture: `ansi-string-data-cp1252.bin`.
+
 ## Not implemented yet
 
 - `// TODO(phase-3)` **`PropertyStoreDataBlock` is opaque bytes.** Decoding it
@@ -138,9 +168,10 @@ The `time 0.1` dependency is gone; `FileTime` is a raw `u64` of 100 ns ticks wit
   with a `CommonNetworkRelativeLink`. Use `local_path` for local targets,
   `environment_path` for portable ones, and `extra_block` for anything else.
 - The builder always writes `StringData` as UTF-16 with `IsUnicode` set. Writing
-  code-page strings is not planned: the code page is not recorded in the file, so
-  an ANSI-only link is only reliably readable on a machine configured like the
-  one that wrote it.
+  code-page strings is still not planned, even though the tables now exist: the
+  code page is not recorded in the file, so an ANSI-only link is only reliably
+  readable on a machine configured like the one that wrote it. Reading them is a
+  compatibility obligation; writing them would be creating the problem.
 - No jump list (`.automaticDestinations-ms`) support. Those are CFB containers of
   shell links and belong in their own crate.
 

@@ -41,16 +41,19 @@
 //! # }
 //! ```
 //!
-//! # Not implemented
+//! # ANSI paths
 //!
-//! `fWide == 0` selects the *system ANSI* codepage, which is a property of the
+//! `fWide == 0` selects the *system ANSI* code page, which is a property of the
 //! machine the bytes came from and is not recorded anywhere in the payload.
-//! [`Path::Ansi`] therefore hands back the raw bytes and refuses to guess; see
-//! the crate README.
+//! [`Path::Ansi`] therefore hands back the raw bytes and refuses to guess:
+//! [`Path::chars`] and [`Path::to_string_lossy`] both return `None`.
 //!
-//! TODO(phase-1): decode ANSI paths once a platform backend can supply the
-//! source codepage (`CF_LOCALE`, or the transport that carried the payload).
-//! Guessing Windows-1252 here would silently corrupt every non-Latin path.
+//! The optional, default-off `codepage` feature adds the API for a caller that
+//! *knows* the code page — from `CF_LOCALE`, from the transport, from the user:
+//! `Path::chars_with`, `Path::to_string_with` and `Builder::push_str_encoded`
+//! all take an `Encoding` rather than assuming one. Guessing Windows-1252 as a
+//! default would silently corrupt every non-Latin path, so the parameter is
+//! required and there is no default.
 
 #![no_std]
 #![forbid(unsafe_code)]
@@ -103,9 +106,8 @@ pub enum Path<'a> {
     /// Raw bytes in the *source machine's* ANSI codepage (`fWide == 0`).
     ///
     /// The codepage is not in the payload. Decoding is deliberately the
-    /// caller's problem.
-    ///
-    /// TODO(phase-1): decode these once a backend can name the codepage.
+    /// caller's problem — `chars_with` and `to_string_with`, behind the
+    /// `codepage` feature, are how a caller that knows it says so.
     Ansi(&'a [u8]),
 }
 
@@ -538,3 +540,126 @@ where
     }
     Ok(b.finish())
 }
+
+/// Decoding and encoding the `fWide == 0` path array with a named code page.
+///
+/// The system ANSI code page is a property of the machine that wrote the
+/// payload and is not in the payload. Everything here therefore takes the
+/// encoding as a parameter; nothing in this module guesses.
+#[cfg(feature = "codepage")]
+mod with_codepage {
+    #[cfg(feature = "alloc")]
+    extern crate alloc;
+
+    use rclip_codepage::{Decoder, Encoding};
+    use rclip_core::{Error, ErrorKind, Result, Utf16Le};
+
+    use super::Path;
+
+    impl<'a> Path<'a> {
+        /// Decode a path a `char` at a time, naming the code page an
+        /// [`Path::Ansi`] entry is in.
+        ///
+        /// Unlike [`Path::chars`], this answers for both variants: `enc` is
+        /// used for an ANSI path and ignored for a wide one. An undefined byte
+        /// yields an error and iteration continues — a single-byte code page
+        /// cannot lose sync — whereas a lone surrogate stops the wide iterator,
+        /// because after one the rest of the path is not trustworthy.
+        #[must_use]
+        pub const fn chars_with(&self, enc: Encoding) -> PathChars<'a> {
+            match *self {
+                Self::Wide(b) => PathChars::Wide(Utf16Le::new(b)),
+                Self::Ansi(b) => PathChars::Ansi(enc.decode(b)),
+            }
+        }
+
+        /// Decode a path with a named code page, failing on anything
+        /// undecodable.
+        ///
+        /// # Errors
+        ///
+        /// [`ErrorKind::Malformed`] at a byte the code page leaves undefined,
+        /// [`ErrorKind::InvalidUtf16`] at a lone surrogate in a wide path.
+        /// A path that does not round-trip is worth knowing about before you
+        /// try to open it, which is why this exists alongside the lossy form.
+        #[cfg(feature = "alloc")]
+        pub fn to_string_with(&self, enc: Encoding) -> Result<alloc::string::String> {
+            let mut out = alloc::string::String::new();
+            for c in self.chars_with(enc) {
+                out.push(c?);
+            }
+            Ok(out)
+        }
+
+        /// Decode a path with a named code page, substituting U+FFFD.
+        #[cfg(feature = "alloc")]
+        #[must_use]
+        pub fn to_string_lossy_with(&self, enc: Encoding) -> alloc::string::String {
+            let mut out = alloc::string::String::new();
+            for c in self.chars_with(enc) {
+                out.push(c.unwrap_or('\u{FFFD}'));
+            }
+            out
+        }
+    }
+
+    /// Iterator over the `char`s of a [`Path`] decoded with a named code page.
+    /// Returned by [`Path::chars_with`].
+    #[derive(Debug, Clone)]
+    pub enum PathChars<'a> {
+        #[doc(hidden)]
+        Wide(Utf16Le<'a>),
+        #[doc(hidden)]
+        Ansi(Decoder<'a>),
+    }
+
+    impl Iterator for PathChars<'_> {
+        type Item = Result<char>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            match self {
+                Self::Wide(it) => it.next(),
+                Self::Ansi(it) => it.next(),
+            }
+        }
+    }
+
+    impl core::iter::FusedIterator for PathChars<'_> {}
+
+    #[cfg(feature = "alloc")]
+    impl super::Builder {
+        /// Append a path to an ANSI builder, encoding it with `enc`.
+        ///
+        /// The counterpart to [`super::Builder::push_str`], which refuses on an
+        /// ANSI builder precisely because it has no code page to encode with.
+        ///
+        /// # Errors
+        ///
+        /// [`ErrorKind::Unsupported`] on a *wide* builder — use `push_str`
+        /// there, and carrying an encoding on the wide path would only invite
+        /// someone to pass the wrong one. [`ErrorKind::Unsupported`] also when
+        /// `path` holds a character `enc` cannot represent, at that character's
+        /// byte offset within `path`: silently dropping it would produce a
+        /// payload naming a file that does not exist.
+        /// [`ErrorKind::Malformed`] if `path` contains a NUL, which would
+        /// truncate the entry and shift every path after it.
+        pub fn push_str_encoded(&mut self, path: &str, enc: Encoding) -> Result<()> {
+            if self.wide {
+                return Err(Error::new(ErrorKind::Unsupported, self.list.len()));
+            }
+            // Encode before appending anything: a character the code page
+            // cannot represent must leave the builder untouched, or the caller
+            // handling the error still ships a truncated path.
+            let bytes = enc.encode_from_str(path)?;
+            self.push(Path::Ansi(&bytes))
+        }
+    }
+}
+
+#[cfg(feature = "codepage")]
+pub use with_codepage::PathChars;
+
+/// Re-exported so a caller can name a code page without adding `rclip-codepage`
+/// to its own manifest.
+#[cfg(feature = "codepage")]
+pub use rclip_codepage::Encoding;

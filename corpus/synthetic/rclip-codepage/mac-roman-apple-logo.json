@@ -1,0 +1,9 @@
+{
+  "format": "single-byte code page text",
+  "origin": "synthetic",
+  "description": "Mac OS Roman with the Euro at 0xDB and the Apple logo at 0xF0",
+  "expect": "ok",
+  "notes": "0xDB was CURRENCY SIGN before Mac OS 8.5 and EURO SIGN after; the pinned ROMAN.TXT (revision c02) says Euro, and so does every current source. 0xF0 is Apple's logo, which has no Unicode character and maps into the private use area at U+F8FF.",
+  "expect_decoded": "Café “Mac” — € ",
+  "expect_codepage": 10000
+}

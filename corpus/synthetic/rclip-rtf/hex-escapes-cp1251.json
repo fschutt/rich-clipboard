@@ -1,0 +1,9 @@
+{
+  "format": "RTF 1.9.1",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "\\'hh bytes under \\ansicpg1251, Cyrillic",
+  "notes": "Without the `codepage` feature every one of these bytes is U+FFFD, because Phase 0 implemented only 1252 and Latin-1 and refused to guess. With it, \\ansicpg1251 resolves through rclip-codepage and the text reads 'Привет!'. Read as Windows-1252 the same bytes are 'Ïðèâåò!' - well-formed Latin text, which is exactly the mojibake a default guess produces.",
+  "expect_text_with_codepage": "Привет!",
+  "expect_text_without_codepage": "������!"
+}

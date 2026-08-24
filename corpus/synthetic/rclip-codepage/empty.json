@@ -1,0 +1,9 @@
+{
+  "format": "single-byte code page text",
+  "origin": "synthetic",
+  "description": "Zero bytes",
+  "expect": "ok",
+  "notes": "A well-formed empty string. The decoder must yield nothing at all rather than one item, which is the off-by-one an ExactSizeIterator implementation invites.",
+  "expect_decoded": "",
+  "expect_codepage": 1252
+}

@@ -50,6 +50,28 @@ wiki's own annotation is `[InternetShortcut.A] ; CP_ACP stuff?` / `[InternetShor
 stuff?` — question marks in the original. Guessing an encoding here would silently corrupt a URL, so
 `url_ansi()` and `url_wide()` hand back the bytes as written and say so.
 
+A file that actually *uses* the `.A` section is not UTF-8, so `parse()` refuses **the whole file**
+— including the ASCII sections that were perfectly readable. That is why the optional, default-off
+`codepage` feature transcodes in front of the parser rather than adding a decoding accessor:
+
+```rust
+use rclip_url_file::{codepage, parse, Encoding};
+
+let text = codepage::decode(bytes, Encoding::Windows1252)?;   // whole file
+let f = parse(text.as_bytes())?;
+assert_eq!(f.url_ansi(), Some("https://de.example.com/bücher/grüße"));
+
+// Or, for just the one value:
+codepage::url_ansi(bytes, Encoding::Windows1252)?;            // Option<String>
+```
+
+Every encoding `rclip-codepage` implements is ASCII-transparent, so transcoding leaves the ASCII
+sections byte-identical; only the high bytes change. `decode` errors rather than substituting at a
+byte the named page leaves undefined, because a U+FFFD in a host name produces a link that looks
+readable and does not resolve. The code page is still a parameter with no default — it is not in
+the file, and the wrong one yields a different, equally well-formed URL. Fixture:
+`ansi-section-cp1252.bin`.
+
 ## Prior art
 
 **Nothing exists.** Searched crates.io for `InternetShortcut`, "internet shortcut", "url file
@@ -79,9 +101,9 @@ one-letter scheme.
 
 - `// TODO(phase-3):` `IDList=` is returned as written. Decoding it needs a PIDL parser; it will go
   through `rclip-idlist` once that crate exists. In files on disk it is almost always empty.
-- Code-page transcoding. `parse()` requires UTF-8: real files are ASCII (a `URL=` is
-  percent-encoded) and Wine writes UTF-8, but a legacy file in a Windows code page must be
-  transcoded by the caller. A `// TODO(phase-4):` if the Phase-1 corpus turns up one that matters.
+- Auto-detecting the code page of a legacy file. `parse()` still requires UTF-8, and the
+  `codepage` feature transcodes only when the caller names an encoding. Sniffing one is out of
+  scope: see the `rclip-codepage` README.
 - The `[DEFAULT]` / `[DOC#n]` `BASEURL`/`ORIGURL` frameset sections, and the extended keys NSIS
   lists (`Roamed`, `Author`, `WhatsNew`, `Desc`, `FeedUrl`, `IsLivePreview`, `PreviewSize`). They
   parse as ordinary sections and entries — `sections()` and `Section::get` reach them — but have no

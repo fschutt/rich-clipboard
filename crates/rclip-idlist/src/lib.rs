@@ -97,9 +97,15 @@ pub use cida::{Cida, CidaChildren};
 pub use dostime::DosDateTime;
 pub use guid::{Guid, GuidStr};
 pub use item::{ItemId, ItemIdList, MIN_ITEM_SIZE};
+/// Re-exported so a caller can name a code page without adding
+/// `rclip-codepage` to its own manifest.
+#[cfg(feature = "codepage")]
+pub use rclip_codepage::Encoding;
 pub use shell_item::{
     ExtensionBlock, FileEntry, NetworkLocation, RootFolder, ShellItem, Uri, Volume,
 };
+#[cfg(feature = "codepage")]
+pub use string::ShellCharsWith;
 pub use string::{ShellChars, ShellStr};
 
 #[cfg(feature = "alloc")]

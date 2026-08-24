@@ -1,0 +1,9 @@
+{
+  "format": "single-byte code page text",
+  "origin": "synthetic",
+  "description": "Windows-1252 text in the 0x80-0x9F range that Latin-1 leaves as C1 controls",
+  "expect": "ok",
+  "notes": "0x93/0x94 are the curly double quotes, 0x80 the euro sign, 0x97 an em dash. Decoding this as ISO-8859-1 yields control characters instead: the single most common mojibake source, and why both encodings are named rather than guessed.",
+  "expect_decoded": "café “quoted” € — dash",
+  "expect_codepage": 1252
+}

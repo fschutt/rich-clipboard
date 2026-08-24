@@ -1,0 +1,9 @@
+{
+  "format": "single-byte code page text",
+  "origin": "synthetic",
+  "description": "Windows-1254 Turkish, including dotted and dotless I",
+  "expect": "ok",
+  "notes": "1254 is 1252 with six Turkish letters substituted at 0xD0/0xDD/0xDE/0xF0/0xFD/0xFE. Decoding Turkish as 1252 silently produces Icelandic eth and thorn.",
+  "expect_decoded": "Türkçe ığşİ",
+  "expect_codepage": 1254
+}

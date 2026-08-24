@@ -306,7 +306,96 @@ fn every_fixture_matches_its_sidecar() {
         }
     }
     assert_eq!(
-        seen, 8,
+        seen, 9,
         "a new fixture needs a test that says what it means"
+    );
+}
+
+// ------------------------------------------------ [InternetShortcut.A]
+
+#[test]
+fn an_ansi_file_is_refused_whole_not_field_by_field() {
+    // The failure that motivates the `codepage` module: one high byte in the
+    // .A section costs you the entire file, including the ASCII sections that
+    // were perfectly readable.
+    let bytes = fixture("ansi-section-cp1252.bin");
+    let err = parse(&bytes).expect_err("not UTF-8");
+    assert_eq!(err.kind, ErrorKind::InvalidUtf8);
+    assert_eq!(
+        err.offset, 141,
+        "the offset points at the first high byte, in the .A section"
+    );
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn transcoding_first_makes_the_ansi_section_readable() {
+    use rclip_url_file::{codepage, Encoding};
+
+    let bytes = fixture("ansi-section-cp1252.bin");
+
+    let text = codepage::decode(&bytes, Encoding::Windows1252).expect("decodes");
+    let f = parse(text.as_bytes()).expect("transcoded file parses");
+
+    // The ASCII half is byte-identical: every code page here is
+    // ASCII-transparent, so transcoding cannot disturb it.
+    assert_eq!(
+        f.url(),
+        Some("https://de.example.com/b%C3%BCcher/gr%C3%BC%C3%9Fe")
+    );
+    assert_eq!(f.icon_index().unwrap().unwrap(), 0);
+
+    assert_eq!(
+        f.url_ansi(),
+        Some("https://de.example.com/bücher/grüße"),
+        "the .A section is the un-percent-encoded form of the same URL"
+    );
+
+    // And the one-liner for the same thing.
+    assert_eq!(
+        codepage::url_ansi(&bytes, Encoding::Windows1252).expect("decodes"),
+        Some("https://de.example.com/bücher/grüße".to_owned())
+    );
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn the_wrong_code_page_changes_the_url_rather_than_failing() {
+    use rclip_url_file::{codepage, Encoding};
+
+    // Both readings are well-formed URLs and only one resolves. There is no
+    // in-band signal to tell them apart, which is why `enc` is a parameter with
+    // no default.
+    let bytes = fixture("ansi-section-cp1252.bin");
+    let a = codepage::url_ansi(&bytes, Encoding::Windows1252).expect("decodes");
+    let b = codepage::url_ansi(&bytes, Encoding::Windows1251).expect("decodes");
+    assert_ne!(a, b);
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn a_byte_the_code_page_leaves_undefined_is_an_error_not_a_replacement_char() {
+    use rclip_url_file::{codepage, Encoding};
+
+    // A U+FFFD inside a host name produces a link that looks readable and does
+    // not resolve, so the strict path is the default and the lossy one is named.
+    let bytes = b"[InternetShortcut.A]\r\nURL=http://a.example/\x81\r\n";
+    let err = codepage::decode(bytes, Encoding::Windows1252).expect_err("0x81 is undefined");
+    assert_eq!(err.kind, ErrorKind::Malformed);
+
+    let lossy = codepage::decode_lossy(bytes, Encoding::Windows1252);
+    assert!(lossy.contains('\u{FFFD}'));
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn a_file_without_the_ansi_section_transcodes_to_none_rather_than_an_error() {
+    use rclip_url_file::{codepage, Encoding};
+
+    let bytes = fixture("minimal-lf.bin");
+    assert_eq!(
+        codepage::url_ansi(&bytes, Encoding::Windows1252).expect("plain ASCII transcodes"),
+        None,
+        "the .A section is optional and most writers omit it"
     );
 }

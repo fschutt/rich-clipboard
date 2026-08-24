@@ -1,0 +1,9 @@
+{
+  "format": "RTF 1.9.1",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "\\pc charset keyword with IBM CP437 \\'hh bytes",
+  "notes": "\\pc is code page 437 and \\pca is 850; the two disagree across most of 0x9B-0xFC, so treating 'OEM' as one thing is a real bug and not a pedantic one. Every byte is defined in 437, so nothing here can decode to U+FFFD once the `codepage` feature is on.",
+  "expect_text_with_codepage": "45 ± 3 ≥ 40",
+  "expect_codepage_number": 437
+}

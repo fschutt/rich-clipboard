@@ -13,7 +13,20 @@ repository   = "https://github.com/fschutt/rich-clipboard"
 authors      = ["Felix Schütt <felix.schuett@maps4print.com>"]
 
 [workspace.dependencies]
+rclip-bookmark = { version = "0.1.0", path = "crates/rclip-bookmark" }
+rclip-cf-html = { version = "0.1.0", path = "crates/rclip-cf-html" }
+rclip-codepage = { version = "0.1.0", path = "crates/rclip-codepage" }
 rclip-core = { version = "0.1.0", path = "crates/rclip-core" }
+rclip-desktop-entry = { version = "0.1.0", path = "crates/rclip-desktop-entry" }
+rclip-dib = { version = "0.1.0", path = "crates/rclip-dib" }
+rclip-dropfiles = { version = "0.1.0", path = "crates/rclip-dropfiles" }
+rclip-file-desc = { version = "0.1.0", path = "crates/rclip-file-desc" }
+rclip-idlist = { version = "0.1.0", path = "crates/rclip-idlist" }
+rclip-rtf = { version = "0.1.0", path = "crates/rclip-rtf" }
+rclip-shell-link = { version = "0.1.0", path = "crates/rclip-shell-link" }
+rclip-uri-list = { version = "0.1.0", path = "crates/rclip-uri-list" }
+rclip-url-file = { version = "0.1.0", path = "crates/rclip-url-file" }
+rclip-webloc = { version = "0.1.0", path = "crates/rclip-webloc" }
 
 [profile.test]
 opt-level = 1

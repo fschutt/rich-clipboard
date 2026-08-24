@@ -390,6 +390,16 @@ fn cida_errors_carry_the_offset_of_the_table_entry_that_was_wrong() {
     let cida = Cida::parse(&buf).expect("the header itself is well formed");
 
     // The parent still reads: one bad child must not cost the caller the rest.
+    //
+    // `parent()` hands back an iterator, so `is_ok()` alone proves nothing —
+    // it succeeds without ever looking at a byte. Walk it to completion, which
+    // is what a caller does and what actually exercises the offset.
+    let parent = cida
+        .parent()
+        .expect("the parent offset is inside the buffer");
+    let items: Result<Vec<_>, _> = parent.collect();
+    let items = items.expect("the parent IDList must walk cleanly");
+    assert_eq!(items.len(), 1, "the parent is a single root/GUID item");
     assert!(
         cida.parent().is_ok(),
         "a bad child offset must not poison the parent"
@@ -633,4 +643,89 @@ fn the_builder_refuses_an_item_too_big_for_a_u16_size_field() {
         "cb is a u16; truncating would change what the list says"
     );
     assert!(b.is_empty(), "a rejected item must leave nothing behind");
+}
+
+// ------------------------------------------------------- ANSI shell strings
+
+/// The ANSI file entry, unpacked once for the tests below.
+#[cfg(feature = "codepage")]
+fn ansi_file_entry_name(bytes: &[u8]) -> ShellStr<'_> {
+    let mut list = ItemIdList::new(bytes);
+    let item = list.next().expect("one item").expect("well formed");
+    match item.parse() {
+        ShellItem::FileEntry(f) => {
+            assert!(
+                !f.has_unicode_name(),
+                "class 0x32 must have FILE_ENTRY_UNICODE clear, or the fixture is not \
+                 exercising the ANSI path at all"
+            );
+            f.primary_name
+        }
+        other => panic!("expected a file entry, got {other:?}"),
+    }
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn an_ansi_name_decodes_once_the_caller_names_the_code_page() {
+    use rclip_idlist::Encoding;
+
+    let buf = fixture("file-entry-ansi-cp1252.bin");
+    let name = ansi_file_entry_name(&buf);
+
+    // Without a code page the high bytes are a hole, and that is still the
+    // default behaviour: the feature adds an API, it does not change one.
+    assert_eq!(
+        name.to_string_lossy(),
+        "Gr\u{FFFD}\u{FFFD}e.txt",
+        "the un-named path must keep refusing to guess"
+    );
+
+    assert_eq!(
+        name.to_string_with(Encoding::Windows1252).expect("decodes"),
+        "Grüße.txt"
+    );
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn the_same_ansi_bytes_read_differently_under_a_different_code_page() {
+    use rclip_idlist::Encoding;
+
+    // This is the whole reason the code page is a parameter rather than a
+    // default: nothing in the payload distinguishes these two readings.
+    let buf = fixture("file-entry-ansi-cp1252.bin");
+    let name = ansi_file_entry_name(&buf);
+    assert_eq!(
+        name.to_string_with(Encoding::Windows1251).expect("decodes"),
+        "GrьЯe.txt"
+    );
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn a_unicode_field_ignores_the_named_code_page() {
+    use rclip_idlist::Encoding;
+
+    let utf16 = ShellStr::Utf16(b"a\0b\0");
+    assert_eq!(utf16.to_string_with(Encoding::Cp437).expect("utf16"), "ab");
+    assert_eq!(utf16.to_string_lossy_with(Encoding::Cp437), "ab");
+}
+
+#[test]
+#[cfg(feature = "codepage")]
+fn an_undefined_byte_is_reported_and_iteration_continues() {
+    use rclip_idlist::Encoding;
+
+    // 0x81 is unassigned in Windows-1252. A single-byte code page cannot lose
+    // sync, so the 'z' after it must still arrive.
+    let s = ShellStr::Ansi(b"a\x81z");
+    let got: Vec<_> = s.chars_with(Encoding::Windows1252).collect();
+    assert_eq!(got.len(), 3, "one item per byte");
+    assert_eq!(got[0], Ok('a'));
+    assert_eq!(got[1].unwrap_err().kind, ErrorKind::Malformed);
+    assert_eq!(got[2], Ok('z'));
+
+    assert_eq!(s.to_string_lossy_with(Encoding::Windows1252), "a\u{FFFD}z");
+    assert!(s.to_string_with(Encoding::Windows1252).is_err());
 }
