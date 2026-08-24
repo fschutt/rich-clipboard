@@ -1,0 +1,8 @@
+{
+  "format": "RTF 1.9.1",
+  "origin": "synthetic",
+  "description": "Truncated mid-document: the outermost group is never closed",
+  "expect": "error",
+  "error_kind": "unexpected end of input",
+  "notes": "A clipboard payload cut short by a failed transfer looks exactly like this."
+}

@@ -1,0 +1,7 @@
+{
+  "format": "RTF 1.9.1",
+  "origin": "synthetic",
+  "description": "Font table (including an entry with a nested {\\*\\panose} group), colour table with the conventional empty 'auto' first entry, and {\\*\\generator}",
+  "expect": "ok",
+  "notes": "colours: [auto, #FF0000, #0000FF]. fonts: f0 Helvetica/swiss, f1 'Courier New'/modern, f2 'Times New Roman'/roman. Decodes to 'red blue bold back\\n'."
+}

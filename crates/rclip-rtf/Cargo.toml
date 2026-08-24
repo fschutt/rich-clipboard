@@ -1,0 +1,25 @@
+[package]
+name        = "rclip-rtf"
+description = "RTF 1.9.1 tokenizer and clipboard-grade styled-text reader"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[features]
+default = []
+## Enables `Document` — the owned, merged-run representation. Parsing itself
+## never needs it; only text that `\uN` / `\'hh` escapes made non-contiguous does.
+alloc = ["rclip-core/alloc"]
+std = ["alloc", "rclip-core/std"]
+
+[dependencies]
+rclip-core = { workspace = true }
+
+## Self dev-dependency so `cargo test -p rclip-rtf` exercises the `alloc` half
+## of the crate too, without making `alloc` a default feature. Cargo permits
+## dev-dependency cycles; `cargo build --no-default-features` is unaffected.
+[dev-dependencies]
+rclip-rtf = { path = ".", features = ["std"] }

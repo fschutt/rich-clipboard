@@ -1,0 +1,7 @@
+{
+  "format": "RTF 1.9.1",
+  "origin": "synthetic",
+  "description": "\\bin11 whose payload is eleven brace characters",
+  "expect": "ok",
+  "notes": "A lexer that does not consume the \\bin payload hands the parser eight braces that are not braces and desynchronises the group stack for the rest of the document. Decodes to 'AB\\n'."
+}

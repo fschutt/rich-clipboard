@@ -1,0 +1,7 @@
+{
+  "format": "RTF 1.9.1",
+  "origin": "synthetic",
+  "description": "An astral character written as two consecutive \\uN surrogate halves, each with its own one-character ASCII fallback",
+  "expect": "ok",
+  "notes": "U+1F60A. The '?' fallbacks sit between the two halves, so a parser that honours \\uc1 sees the halves adjacent and can pair them. Decodes to 'hi \\u{1F60A} there\\n'."
+}

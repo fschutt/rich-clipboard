@@ -1,0 +1,7 @@
+{
+  "format": "RTF 1.9.1",
+  "origin": "synthetic",
+  "description": "A high surrogate with no low surrogate behind it",
+  "expect": "ok",
+  "notes": "Must not panic and must not emit a lone surrogate. Decodes to 'a\\u{FFFD}b\\n'. Word truncating text mid-pair produces exactly this."
+}

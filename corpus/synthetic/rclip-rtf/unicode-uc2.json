@@ -1,0 +1,7 @@
+{
+  "format": "RTF 1.9.1",
+  "origin": "synthetic",
+  "description": "\\ucN skip counting: non-default \\uc2, a nested \\uc1 that must be restored on '}', a negative \\uN, \\'hh fallbacks counted as one character each, and a '}' that ends a skip early",
+  "expect": "ok",
+  "notes": "Decodes to the 16 characters A / EURO SIGN / B / C / EM DASH / D / E / U+EFCF / F / G / SNOWMAN / H / I / SNOWMAN / J / newline; see tests/rtf.rs::unicode_skip_counter for the exact expectation. \\u-4145 is code unit 61391 (U+EFCF) by signed-16-bit wraparound. The '}' after the final \\u9731 truncates a two-character skip to zero, per the spec rule that a scope delimiter ends skippable data."
+}

@@ -1,0 +1,7 @@
+{
+  "format": "RTF 1.9.1",
+  "origin": "synthetic",
+  "description": "\\'hh bytes decoded through Windows-1252",
+  "expect": "ok",
+  "notes": "\\'93/\\'94 are the curly quotes and \\'80 is the euro sign - all in the 0x80-0x9F range where Windows-1252 differs from Latin-1. Decodes to 'caf\\u{E9} \\u{201C}quoted\\u{201D} \\u{20AC}\\n'."
+}

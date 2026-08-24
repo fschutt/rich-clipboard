@@ -1,0 +1,7 @@
+{
+  "format": "RTF 1.9.1",
+  "origin": "synthetic",
+  "description": "{\\*\\foo{\\bar}} must be dropped wholesale including the nested group, while the unmarked {\\baz kept} keeps its text",
+  "expect": "ok",
+  "notes": "Decodes to 'Visible  more kept end\\n' (two spaces where the ignorable destination was). Collapsing these two cases is what makes a parser either eat real text or spill field instructions into the document."
+}

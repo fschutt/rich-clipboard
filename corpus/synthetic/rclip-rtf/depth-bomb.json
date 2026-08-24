@@ -1,0 +1,8 @@
+{
+  "format": "RTF 1.9.1",
+  "origin": "synthetic",
+  "description": "128 nested groups, past rclip_core::MAX_DEPTH of 64",
+  "expect": "error",
+  "error_kind": "nesting depth limit exceeded",
+  "notes": "The parser uses a fixed-size stack and a loop, not recursion, so this returns DepthLimit instead of overflowing the stack."
+}

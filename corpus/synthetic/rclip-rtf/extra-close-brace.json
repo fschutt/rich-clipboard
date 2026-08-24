@@ -1,0 +1,8 @@
+{
+  "format": "RTF 1.9.1",
+  "origin": "synthetic",
+  "description": "A '}' with no matching '{'",
+  "expect": "error",
+  "error_kind": "malformed",
+  "notes": "Continuing past this would mean guessing which group the remaining text belongs to, so it is an error rather than a recovery."
+}

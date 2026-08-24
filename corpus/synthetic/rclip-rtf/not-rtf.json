@@ -1,0 +1,8 @@
+{
+  "format": "RTF 1.9.1",
+  "origin": "synthetic",
+  "description": "HTML offered under an RTF flavor",
+  "expect": "error",
+  "error_kind": "bad magic",
+  "notes": "Clipboard payloads are labelled by the source, and a source that labels HTML as public.rtf is a thing that happens."
+}

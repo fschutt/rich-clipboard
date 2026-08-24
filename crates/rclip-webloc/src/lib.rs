@@ -15,7 +15,7 @@
 //! resource fork holds `url ` and `drag` resources. Pre-OS X internet location
 //! files were written that way, and Finder still writes those resources
 //! alongside the plist today — the capture in
-//! `corpus/synthetic/rclip-webloc/finder-created.webloc` has both. It is out of
+//! `corpus/synthetic/rclip-webloc/finder-created.bin` has both. It is out of
 //! scope for phase 0 and would need a resource-fork reader, which is a format
 //! of its own.
 //!
@@ -38,7 +38,7 @@
 //!
 //! ```
 //! # fn main() -> Result<(), rclip_core::Error> {
-//! # let bytes = include_bytes!("../../../corpus/synthetic/rclip-webloc/finder-created.webloc");
+//! # let bytes = include_bytes!("../../../corpus/synthetic/rclip-webloc/finder-created.bin");
 //! let loc = rclip_webloc::Webloc::parse(bytes)?;
 //! assert_eq!(loc.encoding(), rclip_webloc::Encoding::Xml);
 //! assert!(loc.url().eq_str("https://example.com/rich-clipboard"));
