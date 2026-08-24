@@ -342,6 +342,48 @@ one `ShortcutTarget` type and can convert between each other.
 
 ---
 
+## 4b. Size, and what happens on an enormous paste
+
+Measured, not assumed. Against a 256 MiB hostile payload the codecs behave
+sanely but have no *aggregate* cap:
+
+| Codec | Input | Result |
+|---|---|---|
+| `dropfiles` | unterminated path array | `Err(UnexpectedEof)`, 56 ms |
+| `idlist` | 64M minimum-size items | walked all 67,108,863, 165 ms, **no error** |
+| `webloc` | bplist claiming `u64::MAX/2` objects | `Err(Malformed)`, **8.3 us** |
+
+No panics and no OOM in a parser. But a field-level guard can only reject an
+*impossible* field, and 64 million individually-valid minimum-size items are
+each perfectly possible. Walking them is fast and allocation-free; a caller who
+collects them is holding 64 million items.
+
+**Can the size be known before the paste?** Partly, and it differs per platform
+— which is why `SizeHint` is three-valued rather than a `u64`:
+
+| Platform | In advance | How |
+|---|---|---|
+| Windows | Exact | `GlobalSize` on the `GetClipboardData` handle; `IStream::Stat` for `TYMED_ISTREAM` |
+| macOS | Exact | `-[NSData length]` before copying into a `Vec` |
+| X11 | **Lower bound** | ICCCM: an `INCR` property's value "represents a lower bound on the number of bytes of data in the selection" |
+| Wayland | **Nothing** | `wl_data_offer.receive` gives a pipe fd; you read to EOF and the protocol never states a length |
+
+On Windows and macOS the data is already resident and owned by the clipboard
+server, so asking costs nothing and no copy has happened yet. X11 gives a floor
+before the incremental transfer starts. Wayland gives nothing.
+
+That asymmetry is the design constraint: a lower bound can prove a payload *too
+big* but never that it is small enough, and "unknown" proves neither. So
+`SizeHint::Unknown` returns `None` from `known_bytes()` rather than `0` —
+treating no-information as small is exactly what makes an unbounded pipe read
+the way in. For that case `Budget` counts bytes as they arrive and stops.
+
+The decision belongs to the application, not to this workspace: a paint program
+pasting a 400 MB image is normal, a text field receiving one is not, and only
+the application knows which it is. `OversizePolicy::on_oversize` is the
+callback, defaulting to `Skip` — dropping one oversize flavor still leaves the
+rest of the paste usable.
+
 ## 5. Testing
 
 The formats are defined by what real applications actually emit, which frequently differs from
