@@ -5,7 +5,10 @@ use rclip_core::{
 
 #[test]
 fn mime_parameters_do_not_defeat_recognition() {
-    assert_eq!(Flavor::from_mime("text/plain;charset=utf-8"), Flavor::PlainText);
+    assert_eq!(
+        Flavor::from_mime("text/plain;charset=utf-8"),
+        Flavor::PlainText
+    );
     assert_eq!(Flavor::from_mime("text/plain"), Flavor::PlainText);
     assert_eq!(Flavor::from_mime("UTF8_STRING"), Flavor::PlainText);
     assert_eq!(Flavor::from_mime("text/html;charset=UTF-8"), Flavor::Html);
@@ -21,17 +24,36 @@ fn unknown_flavors_survive_as_their_native_name() {
 
 #[test]
 fn windows_round_trips_through_the_registry() {
-    for flavor in [Flavor::PlainText, Flavor::Html, Flavor::Rtf, Flavor::FileList, Flavor::DibV5] {
+    for flavor in [
+        Flavor::PlainText,
+        Flavor::Html,
+        Flavor::Rtf,
+        Flavor::FileList,
+        Flavor::DibV5,
+    ] {
         let win = flavor.windows().expect("must map to a Windows format");
-        assert_eq!(Flavor::from_windows(win), flavor, "{flavor:?} did not round-trip");
+        assert_eq!(
+            Flavor::from_windows(win),
+            flavor,
+            "{flavor:?} did not round-trip"
+        );
     }
 }
 
 #[test]
 fn the_registry_agrees_with_the_platform_constants() {
-    assert_eq!(Flavor::PlainText.windows(), Some(WindowsFormat::Predefined(cf::UNICODETEXT)));
-    assert_eq!(Flavor::FileList.windows(), Some(WindowsFormat::Predefined(cf::HDROP)));
-    assert_eq!(Flavor::Html.windows(), Some(WindowsFormat::Registered(cfstr::HTML)));
+    assert_eq!(
+        Flavor::PlainText.windows(),
+        Some(WindowsFormat::Predefined(cf::UNICODETEXT))
+    );
+    assert_eq!(
+        Flavor::FileList.windows(),
+        Some(WindowsFormat::Predefined(cf::HDROP))
+    );
+    assert_eq!(
+        Flavor::Html.windows(),
+        Some(WindowsFormat::Registered(cfstr::HTML))
+    );
     assert_eq!(Flavor::Html.uti(), Some("public.html"));
     assert_eq!(Flavor::FileList.mime(), Some("text/uri-list"));
 }

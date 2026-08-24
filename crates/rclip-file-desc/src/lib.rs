@@ -488,8 +488,14 @@ impl<'a> FileDescriptor<'a> {
         let mut r = Reader::new(bytes);
         let flags = Flags::from_bits(r.u32_le()?);
         let clsid = r.guid()?;
-        let icon_size = SizeL { cx: r.i32_le()?, cy: r.i32_le()? };
-        let icon_position = PointL { x: r.i32_le()?, y: r.i32_le()? };
+        let icon_size = SizeL {
+            cx: r.i32_le()?,
+            cy: r.i32_le()?,
+        };
+        let icon_position = PointL {
+            x: r.i32_le()?,
+            y: r.i32_le()?,
+        };
         let file_attributes = r.u32_le()?;
         let creation_time = filetime(&mut r)?;
         let last_access_time = filetime(&mut r)?;
@@ -838,7 +844,10 @@ impl Builder {
     /// An empty group.
     #[must_use]
     pub const fn new() -> Self {
-        Self { items: Vec::new(), count: 0 }
+        Self {
+            items: Vec::new(),
+            count: 0,
+        }
     }
 
     /// Append a descriptor with a Rust string for a name.
@@ -927,13 +936,19 @@ impl Builder {
     /// Write the 72 bytes that precede `cFileName`.
     fn write_fixed(&mut self, raw: RawDescriptor) {
         let start = self.items.len();
-        self.items.extend_from_slice(&raw.flags.bits().to_le_bytes());
+        self.items
+            .extend_from_slice(&raw.flags.bits().to_le_bytes());
         self.items.extend_from_slice(&raw.clsid);
-        self.items.extend_from_slice(&raw.icon_size.cx.to_le_bytes());
-        self.items.extend_from_slice(&raw.icon_size.cy.to_le_bytes());
-        self.items.extend_from_slice(&raw.icon_position.x.to_le_bytes());
-        self.items.extend_from_slice(&raw.icon_position.y.to_le_bytes());
-        self.items.extend_from_slice(&raw.file_attributes.to_le_bytes());
+        self.items
+            .extend_from_slice(&raw.icon_size.cx.to_le_bytes());
+        self.items
+            .extend_from_slice(&raw.icon_size.cy.to_le_bytes());
+        self.items
+            .extend_from_slice(&raw.icon_position.x.to_le_bytes());
+        self.items
+            .extend_from_slice(&raw.icon_position.y.to_le_bytes());
+        self.items
+            .extend_from_slice(&raw.file_attributes.to_le_bytes());
         write_filetime(&mut self.items, raw.creation_time);
         write_filetime(&mut self.items, raw.last_access_time);
         write_filetime(&mut self.items, raw.last_write_time);

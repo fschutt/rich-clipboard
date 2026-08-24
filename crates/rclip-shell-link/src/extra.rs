@@ -212,7 +212,10 @@ impl<'a> PathPair<'a> {
     }
 
     fn parse(r: &mut Reader<'a>) -> Result<Self> {
-        Ok(Self { ansi: trim_nul(r.take(260)?), unicode: r.utf16_fixed(260)? })
+        Ok(Self {
+            ansi: trim_nul(r.take(260)?),
+            unicode: r.utf16_fixed(260)?,
+        })
     }
 }
 
@@ -375,7 +378,13 @@ impl<'a> TrackerDataBlock<'a> {
         let machine_id = ShellStr::Ansi(trim_nul(r.take(16)?));
         let droid = [Guid::from_bytes(r.guid()?), Guid::from_bytes(r.guid()?)];
         let droid_birth = [Guid::from_bytes(r.guid()?), Guid::from_bytes(r.guid()?)];
-        Ok(Self { length, version, machine_id, droid, droid_birth })
+        Ok(Self {
+            length,
+            version,
+            machine_id,
+            droid,
+            droid_birth,
+        })
     }
 }
 
@@ -393,7 +402,10 @@ pub struct ExtraDataBlocks<'a> {
 impl<'a> ExtraDataBlocks<'a> {
     #[must_use]
     pub const fn new(buf: &'a [u8]) -> Self {
-        Self { r: Reader::new(buf), done: false }
+        Self {
+            r: Reader::new(buf),
+            done: false,
+        }
     }
 
     /// Bytes consumed, including the terminal block.
@@ -508,11 +520,16 @@ fn parse_block<'a>(r: &mut Reader<'a>, size: u32, at: usize) -> Result<ExtraData
         }
         SIG_CONSOLE_FE => {
             exact(SIZE_CONSOLE_FE)?;
-            ExtraDataBlock::ConsoleFe { code_page: r.u32_le()? }
+            ExtraDataBlock::ConsoleFe {
+                code_page: r.u32_le()?,
+            }
         }
         SIG_SPECIAL_FOLDER => {
             exact(SIZE_SPECIAL_FOLDER)?;
-            ExtraDataBlock::SpecialFolder { special_folder_id: r.u32_le()?, offset: r.u32_le()? }
+            ExtraDataBlock::SpecialFolder {
+                special_folder_id: r.u32_le()?,
+                offset: r.u32_le()?,
+            }
         }
         SIG_KNOWN_FOLDER => {
             exact(SIZE_KNOWN_FOLDER)?;
@@ -527,20 +544,30 @@ fn parse_block<'a>(r: &mut Reader<'a>, size: u32, at: usize) -> Result<ExtraData
         }
         SIG_SHIM => {
             least(MIN_SIZE_SHIM)?;
-            ExtraDataBlock::Shim { layer_name: ShellStr::Utf16(trim_utf16_nul(r.remaining())) }
+            ExtraDataBlock::Shim {
+                layer_name: ShellStr::Utf16(trim_utf16_nul(r.remaining())),
+            }
         }
         SIG_PROPERTY_STORE => {
             least(MIN_SIZE_PROPERTY_STORE)?;
             // TODO(phase-3): decode the MS-PROPSTORE serialized property
             // storage. It carries the AppUserModelID, which is what taskbar
             // pinning keys off, so it will be wanted eventually.
-            ExtraDataBlock::PropertyStore { property_store: r.remaining() }
+            ExtraDataBlock::PropertyStore {
+                property_store: r.remaining(),
+            }
         }
         SIG_VISTA_AND_ABOVE_ID_LIST => {
             least(MIN_SIZE_VISTA_AND_ABOVE_ID_LIST)?;
-            ExtraDataBlock::VistaAndAboveIdList { id_list: r.remaining() }
+            ExtraDataBlock::VistaAndAboveIdList {
+                id_list: r.remaining(),
+            }
         }
-        _ => ExtraDataBlock::Unknown { signature, size, body: r.remaining() },
+        _ => ExtraDataBlock::Unknown {
+            signature,
+            size,
+            body: r.remaining(),
+        },
     })
 }
 

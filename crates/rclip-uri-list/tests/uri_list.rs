@@ -15,12 +15,19 @@ use rclip_uri_list::{
 };
 
 fn fixture(name: &str) -> Vec<u8> {
-    let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/synthetic/rclip-uri-list/");
+    let p = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../corpus/synthetic/rclip-uri-list/"
+    );
     std::fs::read(format!("{p}{name}")).expect("fixture")
 }
 
 fn uris(bytes: &[u8]) -> Vec<&str> {
-    parse(bytes).expect("parses").uris().map(|u| u.as_str()).collect()
+    parse(bytes)
+        .expect("parses")
+        .uris()
+        .map(|u| u.as_str())
+        .collect()
 }
 
 // -------------------------------------------------------------- RFC 2483 §5
@@ -28,7 +35,10 @@ fn uris(bytes: &[u8]) -> Vec<&str> {
 #[test]
 fn crlf_with_a_trailing_terminator_yields_no_empty_entry() {
     let bytes = fixture("two-files-crlf.bin");
-    assert_eq!(uris(&bytes), vec!["file:///home/me/a.txt", "file:///home/me/b%20c.txt"]);
+    assert_eq!(
+        uris(&bytes),
+        vec!["file:///home/me/a.txt", "file:///home/me/b%20c.txt"]
+    );
 }
 
 #[test]
@@ -36,14 +46,20 @@ fn lf_only_is_accepted_because_glib_accepts_it() {
     // g_uri_list_extract_uris: "We also allow LF delimination as well as the
     // specified CRLF."
     let bytes = fixture("two-files-lf.bin");
-    assert_eq!(uris(&bytes), vec!["file:///home/me/a.txt", "file:///home/me/b.txt"]);
+    assert_eq!(
+        uris(&bytes),
+        vec!["file:///home/me/a.txt", "file:///home/me/b.txt"]
+    );
 }
 
 #[test]
 fn a_lone_cr_also_separates() {
     // Chromium passes "\r\n" to SplitStringPiece, which treats it as a
     // character set, so a lone CR separates there too.
-    assert_eq!(uris(b"file:///a\rfile:///b"), vec!["file:///a", "file:///b"]);
+    assert_eq!(
+        uris(b"file:///a\rfile:///b"),
+        vec!["file:///a", "file:///b"]
+    );
 }
 
 #[test]
@@ -52,7 +68,9 @@ fn hash_is_only_a_comment_at_the_start_of_a_line() {
     let entries: Vec<_> = parse(&bytes).unwrap().entries().collect();
     assert_eq!(entries.len(), 2);
     assert!(matches!(entries[0], Entry::Comment { text, .. } if text.contains("rfc:2483")));
-    let Entry::Uri(u) = entries[1] else { panic!("second entry is a URI") };
+    let Entry::Uri(u) = entries[1] else {
+        panic!("second entry is a URI")
+    };
     assert_eq!(
         u.as_str(),
         "https://example.com/a#frag",
@@ -74,7 +92,11 @@ fn a_file_uri_splits_into_authority_and_still_encoded_path() {
     let f = list.first().unwrap().as_file().unwrap();
     assert_eq!(f.host(), "");
     assert!(f.is_local());
-    assert_eq!(f.path(), "/home/me/a%20b.txt", "decoding is the caller's decision");
+    assert_eq!(
+        f.path(),
+        "/home/me/a%20b.txt",
+        "decoding is the caller's decision"
+    );
 }
 
 #[test]
@@ -104,8 +126,12 @@ fn a_non_file_uri_is_not_a_file_uri() {
 #[test]
 fn percent_decoding_yields_bytes_because_posix_paths_are_bytes() {
     let list = parse(b"file:///tmp/%FF%FE.bin").unwrap();
-    let decoded: Vec<u8> =
-        list.first().unwrap().percent_decode().map(|b| b.expect("valid escapes")).collect();
+    let decoded: Vec<u8> = list
+        .first()
+        .unwrap()
+        .percent_decode()
+        .map(|b| b.expect("valid escapes"))
+        .collect();
     assert_eq!(decoded, b"file:///tmp/\xff\xfe.bin");
 }
 
@@ -115,7 +141,10 @@ fn a_truncated_percent_escape_is_reported_with_its_offset() {
     let list = parse(&bytes).expect("parse is structural and must succeed");
     let err = list.validate_percent_encoding().unwrap_err();
     assert_eq!(err.kind, ErrorKind::Malformed);
-    assert_eq!(err.offset, 17, "points at the '%' that has no two hex digits after it");
+    assert_eq!(
+        err.offset, 17,
+        "points at the '%' that has no two hex digits after it"
+    );
 }
 
 #[test]
@@ -187,10 +216,15 @@ fn reading_is_lenient_the_way_thunars_reader_is() {
 #[test]
 fn the_pre_nautilus_40_text_payload_is_recognized() {
     let bytes = fixture("nautilus-legacy-text.bin");
-    assert!(rclip_uri_list::convention::is_nautilus_text_clipboard(&bytes));
+    assert!(rclip_uri_list::convention::is_nautilus_text_clipboard(
+        &bytes
+    ));
     let cf = parse_nautilus_text_clipboard(&bytes).unwrap();
     assert_eq!(cf.action(), FileAction::Copy);
-    assert_eq!(cf.uris().map(|u| u.as_str()).collect::<Vec<_>>(), vec!["file:///a", "file:///b"]);
+    assert_eq!(
+        cf.uris().map(|u| u.as_str()).collect::<Vec<_>>(),
+        vec!["file:///a", "file:///b"]
+    );
 }
 
 #[test]
@@ -204,8 +238,13 @@ fn the_magic_line_is_not_a_mime_type_and_is_not_offered() {
 #[test]
 fn an_ordinary_uri_list_is_not_mistaken_for_the_legacy_payload() {
     let bytes = fixture("two-files-crlf.bin");
-    assert!(!rclip_uri_list::convention::is_nautilus_text_clipboard(&bytes));
-    assert_eq!(parse_nautilus_text_clipboard(&bytes).unwrap_err().kind, ErrorKind::BadMagic);
+    assert!(!rclip_uri_list::convention::is_nautilus_text_clipboard(
+        &bytes
+    ));
+    assert_eq!(
+        parse_nautilus_text_clipboard(&bytes).unwrap_err().kind,
+        ErrorKind::BadMagic
+    );
 }
 
 // ------------------------------------- application/x-kde-cutselection
@@ -213,11 +252,29 @@ fn an_ordinary_uri_list_is_not_mistaken_for_the_legacy_payload() {
 #[test]
 fn the_kde_flag_is_read_from_byte_zero_only() {
     // KIO::isClipboardDataCut is `!a.isEmpty() && a.at(0) == '1'`.
-    assert_eq!(parse_kde_cut_selection(&fixture("kde-cutselection-cut.bin")), FileAction::Cut);
-    assert_eq!(parse_kde_cut_selection(&fixture("kde-cutselection-copy.bin")), FileAction::Copy);
-    assert_eq!(parse_kde_cut_selection(b"1\n"), FileAction::Cut, "a stray newline changes nothing");
-    assert_eq!(parse_kde_cut_selection(b""), FileAction::Copy, "absent means copy");
-    assert_eq!(parse_kde_cut_selection(b"true"), FileAction::Copy, "anything else means copy");
+    assert_eq!(
+        parse_kde_cut_selection(&fixture("kde-cutselection-cut.bin")),
+        FileAction::Cut
+    );
+    assert_eq!(
+        parse_kde_cut_selection(&fixture("kde-cutselection-copy.bin")),
+        FileAction::Copy
+    );
+    assert_eq!(
+        parse_kde_cut_selection(b"1\n"),
+        FileAction::Cut,
+        "a stray newline changes nothing"
+    );
+    assert_eq!(
+        parse_kde_cut_selection(b""),
+        FileAction::Copy,
+        "absent means copy"
+    );
+    assert_eq!(
+        parse_kde_cut_selection(b"true"),
+        FileAction::Copy,
+        "anything else means copy"
+    );
 }
 
 #[test]
@@ -231,10 +288,22 @@ fn kde_writes_zero_for_copy_so_presence_is_not_cut() {
 #[test]
 fn the_recommended_offer_set_covers_all_three_desktops() {
     let mimes: Vec<_> = RECOMMENDED.iter().map(|o| o.mime).collect();
-    assert!(mimes.contains(&MIME_URI_LIST), "every reader understands this one");
-    assert!(mimes.contains(&MIME_GNOME_COPIED_FILES), "GNOME, Xfce, Cinnamon, COSMIC");
-    assert!(mimes.contains(&MIME_KDE_CUT_SELECTION), "KDE reads nothing else");
-    assert_eq!(RECOMMENDED[0].mime, MIME_URI_LIST, "advertise the universal one first");
+    assert!(
+        mimes.contains(&MIME_URI_LIST),
+        "every reader understands this one"
+    );
+    assert!(
+        mimes.contains(&MIME_GNOME_COPIED_FILES),
+        "GNOME, Xfce, Cinnamon, COSMIC"
+    );
+    assert!(
+        mimes.contains(&MIME_KDE_CUT_SELECTION),
+        "KDE reads nothing else"
+    );
+    assert_eq!(
+        RECOMMENDED[0].mime, MIME_URI_LIST,
+        "advertise the universal one first"
+    );
 }
 
 #[cfg(feature = "alloc")]
@@ -245,7 +314,10 @@ fn the_gnome_payload_is_written_without_a_trailing_newline() {
     let out = emit::write_copied_files(FileAction::Cut, ["file:///a", "file:///b"]);
     assert_eq!(out, b"cut\nfile:///a\nfile:///b");
     assert!(!out.ends_with(b"\n"));
-    assert!(!out.windows(2).any(|w| w == b"\r\n"), "CRLF fails g_uri_is_valid");
+    assert!(
+        !out.windows(2).any(|w| w == b"\r\n"),
+        "CRLF fails g_uri_is_valid"
+    );
 }
 
 #[cfg(feature = "alloc")]
@@ -265,7 +337,10 @@ fn what_is_written_is_what_is_read_back() {
         let bytes = emit::write_copied_files(action, want);
         let cf = parse_copied_files(&bytes).unwrap();
         assert_eq!(cf.action(), action);
-        assert_eq!(cf.uris().map(|u| u.as_str()).collect::<Vec<_>>(), want.to_vec());
+        assert_eq!(
+            cf.uris().map(|u| u.as_str()).collect::<Vec<_>>(),
+            want.to_vec()
+        );
 
         let bytes = emit::write_uri_list(want);
         assert_eq!(uris(&bytes), want.to_vec());
@@ -293,7 +368,10 @@ fn decoding_to_a_string_fails_loudly_on_a_non_utf8_path() {
     let list = parse(b"file:///tmp/%FF.bin").unwrap();
     let u = list.first().unwrap();
     assert_eq!(u.to_decoded_bytes().unwrap(), b"file:///tmp/\xff.bin");
-    assert_eq!(u.to_decoded_string().unwrap_err().kind, ErrorKind::InvalidUtf8);
+    assert_eq!(
+        u.to_decoded_string().unwrap_err().kind,
+        ErrorKind::InvalidUtf8
+    );
 }
 
 // ---------------------------------------------------------------- sidecars
@@ -302,7 +380,9 @@ fn decoding_to_a_string_fails_loudly_on_a_non_utf8_path() {
 /// generated to a fixed shape, and a dev-dependency on `serde_json` to read one
 /// field would be the largest dependency in the crate.
 fn expect_of(json: &str) -> &str {
-    let at = json.find("\"expect\"").expect("sidecar has an expect field");
+    let at = json
+        .find("\"expect\"")
+        .expect("sidecar has an expect field");
     let rest = &json[at + "\"expect\"".len()..];
     let open = rest.find('"').expect("a value follows");
     let tail = &rest[open + 1..];
@@ -316,7 +396,10 @@ fn expect_of(json: &str) -> &str {
 /// deciding what it means.
 #[test]
 fn every_fixture_matches_its_sidecar() {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/synthetic/rclip-uri-list");
+    let dir = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../corpus/synthetic/rclip-uri-list"
+    );
     let mut seen = 0usize;
     for entry in std::fs::read_dir(dir).expect("corpus directory") {
         let path = entry.unwrap().path();
@@ -341,7 +424,11 @@ fn every_fixture_matches_its_sidecar() {
                         .unwrap_or_else(|e| panic!("{stem} claims ok but failed: {e}"));
                 } else if stem.starts_with("kde-") {
                     // Infallible by construction; assert it agrees with the name.
-                    let want = if stem.ends_with("cut") { FileAction::Cut } else { FileAction::Copy };
+                    let want = if stem.ends_with("cut") {
+                        FileAction::Cut
+                    } else {
+                        FileAction::Copy
+                    };
                     assert_eq!(parse_kde_cut_selection(&bytes), want, "{stem}");
                 } else {
                     let list = parse(&bytes)
@@ -354,8 +441,9 @@ fn every_fixture_matches_its_sidecar() {
                 let failed = match stem.as_str() {
                     // parse() is structural; a truncated escape is only visible
                     // once a URI is looked at.
-                    "bad-percent" => parse(&bytes)
-                        .map_or(true, |l| l.validate_percent_encoding().is_err()),
+                    "bad-percent" => {
+                        parse(&bytes).map_or(true, |l| l.validate_percent_encoding().is_err())
+                    }
                     s if s.starts_with("gnome-") => parse_copied_files(&bytes).is_err(),
                     _ => parse(&bytes).is_err(),
                 };
@@ -364,5 +452,8 @@ fn every_fixture_matches_its_sidecar() {
             other => panic!("{stem}: expect must be \"ok\" or \"error\", not {other:?}"),
         }
     }
-    assert_eq!(seen, 13, "a new fixture needs a test that says what it means");
+    assert_eq!(
+        seen, 13,
+        "a new fixture needs a test that says what it means"
+    );
 }

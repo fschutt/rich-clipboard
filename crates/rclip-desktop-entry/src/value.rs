@@ -62,7 +62,11 @@ impl<'a> Value<'a> {
     /// else's `Exec=`.
     #[must_use]
     pub const fn chars(&self) -> Unescape<'a> {
-        Unescape { rest: self.raw, offset: self.offset, done: false }
+        Unescape {
+            rest: self.raw,
+            offset: self.offset,
+            done: false,
+        }
     }
 
     /// The items of a `string(s)` / `localestring(s)` value.
@@ -71,7 +75,14 @@ impl<'a> Value<'a> {
     /// on it. See the module docs for why the split happens first.
     #[must_use]
     pub const fn items(&self) -> ListItems<'a> {
-        ListItems { rest: if self.raw.is_empty() { None } else { Some(self.raw) }, offset: self.offset }
+        ListItems {
+            rest: if self.raw.is_empty() {
+                None
+            } else {
+                Some(self.raw)
+            },
+            offset: self.offset,
+        }
     }
 
     /// Compare the decoded value against a plain string without allocating.
@@ -120,7 +131,9 @@ impl<'a> Value<'a> {
     /// [`ErrorKind::Malformed`] if the text does not parse as an `f64`.
     pub fn as_f64(&self) -> Result<f64> {
         // Numeric values contain no escapes, so the raw text is the value.
-        self.raw.parse::<f64>().map_err(|_| Error::new(ErrorKind::Malformed, self.offset))
+        self.raw
+            .parse::<f64>()
+            .map_err(|_| Error::new(ErrorKind::Malformed, self.offset))
     }
 }
 

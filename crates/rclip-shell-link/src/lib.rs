@@ -148,7 +148,10 @@ impl<'a> ShellLink<'a> {
         let mut r = Reader::new(buf);
         r.skip(HEADER_SIZE)?;
 
-        let target_id_list = if header.link_flags.contains(LinkFlags::HAS_LINK_TARGET_ID_LIST) {
+        let target_id_list = if header
+            .link_flags
+            .contains(LinkFlags::HAS_LINK_TARGET_ID_LIST)
+        {
             Some(LinkTargetIdList::parse(&mut r)?)
         } else {
             None
@@ -162,7 +165,13 @@ impl<'a> ShellLink<'a> {
 
         let string_data = StringData::parse(&mut r, header.link_flags)?;
 
-        Ok(Self { header, target_id_list, link_info, string_data, extra: r.remaining() })
+        Ok(Self {
+            header,
+            target_id_list,
+            link_info,
+            string_data,
+            extra: r.remaining(),
+        })
     }
 
     /// Walk the `ExtraData` chain.
@@ -184,7 +193,9 @@ impl<'a> ShellLink<'a> {
     /// block" question. Stops at the first structural error, like the iterator.
     #[must_use]
     pub fn find_extra(&self, signature: u32) -> Option<ExtraDataBlock<'a>> {
-        self.extra_data().map_while(Result::ok).find(|b| b.signature() == signature)
+        self.extra_data()
+            .map_while(Result::ok)
+            .find(|b| b.signature() == signature)
     }
 
     /// The target as an environment-variable path, e.g.

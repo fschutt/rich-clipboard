@@ -4,7 +4,10 @@ use rclip_bookmark::{key, Bookmark, Date, EntryKey, Magic, Value};
 use rclip_core::{ErrorKind, MAX_DEPTH};
 
 fn fixture(name: &str) -> Vec<u8> {
-    let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/synthetic/rclip-bookmark/");
+    let p = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../corpus/synthetic/rclip-bookmark/"
+    );
     std::fs::read(format!("{p}{name}")).expect("fixture")
 }
 
@@ -15,7 +18,11 @@ fn err_kind(name: &str) -> ErrorKind {
         // A parse that succeeds still has to fail somewhere: the malformed
         // fixtures split into ones the header rejects and ones only a full walk
         // catches, and the test should not care which.
-        Ok(bm) => bm.validate().expect_err("malformed fixture must not validate").kind,
+        Ok(bm) => {
+            bm.validate()
+                .expect_err("malformed fixture must not validate")
+                .kind
+        }
     }
 }
 
@@ -25,11 +32,26 @@ fn minimal_book_has_url_and_filename() {
     let bm = Bookmark::parse(&bytes).expect("well-formed minimal bookmark");
 
     assert_eq!(bm.magic(), Magic::Book);
-    assert_eq!(bm.header_size(), 48, "48-byte prolog is the pre-macOS-26 shape");
-    assert_eq!(bm.size(), bytes.len(), "declared size must match the fixture");
-    assert_eq!(bm.target_url().unwrap(), Some("file:///Users/example/Documents/report.pdf"));
+    assert_eq!(
+        bm.header_size(),
+        48,
+        "48-byte prolog is the pre-macOS-26 shape"
+    );
+    assert_eq!(
+        bm.size(),
+        bytes.len(),
+        "declared size must match the fixture"
+    );
+    assert_eq!(
+        bm.target_url().unwrap(),
+        Some("file:///Users/example/Documents/report.pdf")
+    );
     assert_eq!(bm.target_filename().unwrap(), Some("report.pdf"));
-    assert_eq!(bm.display_name().unwrap(), None, "absent key is None, not an error");
+    assert_eq!(
+        bm.display_name().unwrap(),
+        None,
+        "absent key is None, not an error"
+    );
     bm.validate().expect("graph is sound");
 }
 
@@ -39,7 +61,11 @@ fn toc_entries_are_enumerable() {
     let bm = Bookmark::parse(&bytes).unwrap();
 
     let tocs: Vec<_> = bm.tocs().map(|t| t.unwrap()).collect();
-    assert_eq!(tocs.len(), 1, "one TOC, next-offset zero terminates the chain");
+    assert_eq!(
+        tocs.len(),
+        1,
+        "one TOC, next-offset zero terminates the chain"
+    );
     assert_eq!(tocs[0].id(), 1);
     assert_eq!(tocs[0].len(), 2);
 
@@ -70,7 +96,11 @@ fn path_components_come_back_in_order_without_separators() {
 fn dates_are_big_endian() {
     let bytes = fixture("date-alis.bin");
     let bm = Bookmark::parse(&bytes).unwrap();
-    assert_eq!(bm.magic(), Magic::Alis, "'alis' is as valid a signature as 'book'");
+    assert_eq!(
+        bm.magic(),
+        Magic::Alis,
+        "'alis' is as valid a signature as 'book'"
+    );
 
     let d = bm.target_creation_date().unwrap().expect("0x1040 present");
     // 2020-01-01T00:00:00Z. Read little-endian the same eight bytes decode to
@@ -105,8 +135,14 @@ fn bit31_key_resolves_to_a_string() {
     let toc = bm.tocs().next().unwrap().unwrap();
     let entries: Vec<_> = toc.iter().map(|e| e.unwrap()).collect();
     assert!(!entries[0].has_named_key());
-    assert!(entries[1].has_named_key(), "bit 31 set means the key names itself");
-    assert_eq!(entries[1].key().unwrap(), EntryKey::Named("com.example.custom"));
+    assert!(
+        entries[1].has_named_key(),
+        "bit 31 set means the key names itself"
+    );
+    assert_eq!(
+        entries[1].key().unwrap(),
+        EntryKey::Named("com.example.custom")
+    );
 
     assert!(
         bm.get_named("com.example.custom").unwrap().is_some(),
@@ -131,7 +167,10 @@ fn shared_subtrees_are_not_cycles() {
     assert_eq!(array.len(), 2);
 
     for element in array.iter() {
-        let dict = element.unwrap().as_dict().expect("elements are dictionaries");
+        let dict = element
+            .unwrap()
+            .as_dict()
+            .expect("elements are dictionaries");
         let pairs: Vec<_> = dict.iter().map(|p| p.unwrap()).collect();
         assert_eq!(pairs.len(), 2);
         assert_eq!(pairs[0].0.as_str(), Some("alpha"));
@@ -161,12 +200,19 @@ fn cyclic_array_terminates_at_the_depth_limit() {
             Ok(v) => {
                 value = v;
                 hops += 1;
-                assert!(hops <= MAX_DEPTH, "descent must stop at MAX_DEPTH, not run forever");
+                assert!(
+                    hops <= MAX_DEPTH,
+                    "descent must stop at MAX_DEPTH, not run forever"
+                );
             }
             Err(e) => break e.kind,
         }
     };
-    assert_eq!(kind, ErrorKind::DepthLimit, "a self-referential offset is a depth failure");
+    assert_eq!(
+        kind,
+        ErrorKind::DepthLimit,
+        "a self-referential offset is a depth failure"
+    );
     assert_eq!(hops, MAX_DEPTH - 1, "the limit bites exactly at MAX_DEPTH");
 
     // And the same thing through the library's own walk, which is what a caller
@@ -196,7 +242,11 @@ fn toc_chain_that_loops_is_cut_off() {
         }
     }
     assert!(seen > 0, "the first TOC is well-formed and must be yielded");
-    assert_eq!(kind, Some(ErrorKind::Malformed), "the loop is reported, not ignored");
+    assert_eq!(
+        kind,
+        Some(ErrorKind::Malformed),
+        "the loop is reported, not ignored"
+    );
 }
 
 #[test]
@@ -213,7 +263,12 @@ fn fanout_bomb_is_stopped_by_the_node_budget() {
     );
 
     // Lazy access is unaffected: the caller only pays for what it reads.
-    let top = bm.get(key::TARGET_PATH).unwrap().unwrap().as_array().unwrap();
+    let top = bm
+        .get(key::TARGET_PATH)
+        .unwrap()
+        .unwrap()
+        .as_array()
+        .unwrap();
     assert_eq!(top.len(), 8);
     assert_eq!(top.get(0).unwrap().as_array().unwrap().len(), 8);
 }
@@ -262,7 +317,11 @@ fn trailing_bytes_after_the_declared_size_are_unreachable() {
     bytes.extend_from_slice(b"SECRET-DATA-THAT-FOLLOWS-THE-BOOKMARK");
 
     let bm = Bookmark::parse(&bytes).expect("embedded bookmarks carry trailing bytes");
-    assert_eq!(bm.size(), real_len, "the declared size wins over the slice length");
+    assert_eq!(
+        bm.size(),
+        real_len,
+        "the declared size wins over the slice length"
+    );
     assert_eq!(bm.target_filename().unwrap(), Some("report.pdf"));
 }
 
@@ -276,7 +335,8 @@ fn corefoundation_capture_parses() {
     assert_eq!(bm.magic(), Magic::Book);
     assert_eq!(bm.version(), rclip_bookmark::VERSION_10040000);
     assert_eq!(bm.header_size(), 48);
-    bm.validate().expect("CoreFoundation's own output must validate");
+    bm.validate()
+        .expect("CoreFoundation's own output must validate");
 
     let parts: Vec<&str> = bm
         .path_components()
@@ -288,8 +348,14 @@ fn corefoundation_capture_parses() {
 
     assert_eq!(bm.volume_name().unwrap(), Some("Macintosh HD"));
     assert_eq!(bm.volume_path().unwrap(), Some("/"));
-    assert_eq!(bm.get(key::VOLUME_IS_ROOT).unwrap().unwrap().as_bool(), Some(true));
-    assert_eq!(bm.get(key::VOLUME_URL).unwrap().unwrap().as_str(), Some("file:///"));
+    assert_eq!(
+        bm.get(key::VOLUME_IS_ROOT).unwrap().unwrap().as_bool(),
+        Some(true)
+    );
+    assert_eq!(
+        bm.get(key::VOLUME_URL).unwrap().unwrap().as_str(),
+        Some("file:///")
+    );
 
     // Volume UUID is stored as a string record even though there is a perfectly
     // good UUID record type; asserting it here keeps that surprise from being
@@ -324,7 +390,12 @@ fn cnid_path_matches_path_components() {
     let bytes = fixture("corefoundation-file.bin");
     let bm = Bookmark::parse(&bytes).unwrap();
 
-    let cnids = bm.get(key::TARGET_CNID_PATH).unwrap().unwrap().as_array().unwrap();
+    let cnids = bm
+        .get(key::TARGET_CNID_PATH)
+        .unwrap()
+        .unwrap()
+        .as_array()
+        .unwrap();
     let parts = bm.path_components().unwrap().unwrap();
     assert_eq!(
         cnids.len(),
@@ -350,7 +421,10 @@ fn target_path_joins_components() {
 
 #[test]
 fn every_fixture_matches_its_sidecar() {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/synthetic/rclip-bookmark/");
+    let dir = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../corpus/synthetic/rclip-bookmark/"
+    );
     let mut checked = 0;
     for entry in std::fs::read_dir(dir).expect("corpus dir") {
         let path = entry.unwrap().path();
@@ -370,7 +444,10 @@ fn every_fixture_matches_its_sidecar() {
         );
         checked += 1;
     }
-    assert!(checked >= 11, "expected the whole synthetic corpus, saw {checked}");
+    assert!(
+        checked >= 11,
+        "expected the whole synthetic corpus, saw {checked}"
+    );
 }
 
 #[test]
@@ -391,5 +468,6 @@ fn unknown_types_survive_as_raw_bytes() {
         }
         other => panic!("unrecognised types must round-trip as raw bytes, got {other:?}"),
     }
-    bm.validate().expect("an unknown leaf type is not a structural error");
+    bm.validate()
+        .expect("an unknown leaf type is not a structural error");
 }

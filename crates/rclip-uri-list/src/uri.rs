@@ -45,7 +45,8 @@ impl<'a> Uri<'a> {
     /// still means the same thing.
     #[must_use]
     pub fn is_file(&self) -> bool {
-        self.scheme().is_some_and(|s| s.eq_ignore_ascii_case("file"))
+        self.scheme()
+            .is_some_and(|s| s.eq_ignore_ascii_case("file"))
     }
 
     /// Split a `file:` URI into authority and path.
@@ -114,7 +115,10 @@ impl<'a> Uri<'a> {
     /// `char` would have to either fail or corrupt such a path.
     #[must_use]
     pub const fn percent_decode(&self) -> PercentDecode<'a> {
-        PercentDecode { rest: self.raw.as_bytes(), offset: self.offset }
+        PercentDecode {
+            rest: self.raw.as_bytes(),
+            offset: self.offset,
+        }
     }
 }
 
@@ -227,8 +231,12 @@ mod with_alloc {
         /// As [`Uri::to_decoded_bytes`], plus [`ErrorKind::InvalidUtf8`].
         pub fn to_decoded_string(&self) -> Result<String> {
             let bytes = self.to_decoded_bytes()?;
-            String::from_utf8(bytes)
-                .map_err(|e| Error::new(ErrorKind::InvalidUtf8, self.offset() + e.utf8_error().valid_up_to()))
+            String::from_utf8(bytes).map_err(|e| {
+                Error::new(
+                    ErrorKind::InvalidUtf8,
+                    self.offset() + e.utf8_error().valid_up_to(),
+                )
+            })
         }
     }
 }

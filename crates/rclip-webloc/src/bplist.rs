@@ -66,7 +66,11 @@ pub enum Object<'a> {
     Str(Text<'a>),
     /// A `0xDn` dictionary: `count` key references followed by `count` value
     /// references, in the two slices.
-    Dict { keys: &'a [u8], values: &'a [u8], count: usize },
+    Dict {
+        keys: &'a [u8],
+        values: &'a [u8],
+        count: usize,
+    },
     /// Anything else — a number, a date, an array. Deliberately not decoded:
     /// a `.webloc` has no use for them and every type left undecoded is a type
     /// that cannot be a parser bug.
@@ -139,7 +143,14 @@ impl<'a> BinaryPlist<'a> {
             return Err(Error::new(ErrorKind::TooLarge, trailer_at + 8));
         }
 
-        Ok(Self { buf, offset_size, ref_size, num_objects, top_object, table_offset })
+        Ok(Self {
+            buf,
+            offset_size,
+            ref_size,
+            num_objects,
+            top_object,
+            table_offset,
+        })
     }
 
     /// Index of the root object.
@@ -246,7 +257,11 @@ impl<'a> BinaryPlist<'a> {
                 r.check_count(count, self.ref_size * 2)?;
                 let keys = r.take(total)?;
                 let values = r.take(total)?;
-                Ok(Object::Dict { keys, values, count })
+                Ok(Object::Dict {
+                    keys,
+                    values,
+                    count,
+                })
             }
             marker::SIMPLE | marker::INT | marker::ARRAY | marker::SET => Ok(Object::Other),
             _ => Ok(Object::Other),
@@ -319,13 +334,20 @@ mod tests {
         let p = BinaryPlist::parse(&bytes[..52]).unwrap();
         assert_eq!(p.len(), 3);
         assert_eq!(p.top_object(), 0);
-        let Object::Dict { keys, values, count } = p.object(0, 0).unwrap() else {
+        let Object::Dict {
+            keys,
+            values,
+            count,
+        } = p.object(0, 0).unwrap()
+        else {
             panic!("root is a dictionary");
         };
         assert_eq!(count, 1);
         assert_eq!(p.reference(keys, 0).unwrap(), 1);
         assert_eq!(p.reference(values, 0).unwrap(), 2);
-        let Object::Str(k) = p.object(1, 1).unwrap() else { panic!("key is a string") };
+        let Object::Str(k) = p.object(1, 1).unwrap() else {
+            panic!("key is a string")
+        };
         assert!(k.eq_str("URL"));
     }
 
@@ -358,13 +380,19 @@ mod tests {
     fn zero_offset_size_is_rejected() {
         let mut bytes = tiny();
         bytes[26] = 0;
-        assert_eq!(BinaryPlist::parse(&bytes[..52]).unwrap_err().kind, ErrorKind::Malformed);
+        assert_eq!(
+            BinaryPlist::parse(&bytes[..52]).unwrap_err().kind,
+            ErrorKind::Malformed
+        );
     }
 
     #[test]
     fn depth_limit_is_enforced() {
         let bytes = tiny();
         let p = BinaryPlist::parse(&bytes[..52]).unwrap();
-        assert_eq!(p.object(0, MAX_DEPTH).unwrap_err().kind, ErrorKind::DepthLimit);
+        assert_eq!(
+            p.object(0, MAX_DEPTH).unwrap_err().kind,
+            ErrorKind::DepthLimit
+        );
     }
 }

@@ -143,7 +143,11 @@ impl ShellLinkBuilder {
     /// has changed, so a real one is worth passing if you have it.
     #[must_use]
     pub fn volume(mut self, drive_type: DriveType, serial_number: u32, label: &str) -> Self {
-        self.volume = Some(Volume { drive_type, serial_number, label: String::from(label) });
+        self.volume = Some(Volume {
+            drive_type,
+            serial_number,
+            label: String::from(label),
+        });
         self
     }
 
@@ -401,8 +405,11 @@ fn build_link_info(path: &str, volume: Option<&Volume>) -> Result<Vec<u8>> {
     let volume = volume.unwrap_or(&default_volume);
 
     let needs_unicode = !path.is_ascii();
-    let header_size =
-        if needs_unicode { LINK_INFO_HEADER_WITH_UNICODE } else { LINK_INFO_HEADER_MIN };
+    let header_size = if needs_unicode {
+        LINK_INFO_HEADER_WITH_UNICODE
+    } else {
+        LINK_INFO_HEADER_MIN
+    };
 
     let volume_id = build_volume_id(volume);
 
@@ -445,9 +452,10 @@ fn build_link_info(path: &str, volume: Option<&Volume>) -> Result<Vec<u8>> {
     // No CommonNetworkRelativeLink: the flag is clear, so the offset MUST be 0.
     out.extend_from_slice(&0u32.to_le_bytes());
     out.extend_from_slice(&(common_path_suffix_offset as u32).to_le_bytes());
-    if let (Some(lbp), Some(cps)) =
-        (local_base_path_offset_unicode, common_path_suffix_offset_unicode)
-    {
+    if let (Some(lbp), Some(cps)) = (
+        local_base_path_offset_unicode,
+        common_path_suffix_offset_unicode,
+    ) {
         out.extend_from_slice(&(lbp as u32).to_le_bytes());
         out.extend_from_slice(&(cps as u32).to_le_bytes());
     }
@@ -492,7 +500,10 @@ fn build_volume_id(volume: &Volume) -> Vec<u8> {
     out.extend_from_slice(&label);
 
     debug_assert_eq!(out.len(), size as usize);
-    debug_assert!(size > 0x10, "MS-SHLLINK 2.3.1: VolumeIDSize MUST be greater than 0x10");
+    debug_assert!(
+        size > 0x10,
+        "MS-SHLLINK 2.3.1: VolumeIDSize MUST be greater than 0x10"
+    );
     out
 }
 
@@ -503,5 +514,7 @@ fn build_volume_id(volume: &Volume) -> Vec<u8> {
 /// and it is visibly wrong rather than plausibly wrong — the Unicode companion
 /// field is where the real text goes.
 fn ansi_lossy(s: &str) -> Vec<u8> {
-    s.chars().map(|c| if c.is_ascii() { c as u8 } else { b'?' }).collect()
+    s.chars()
+        .map(|c| if c.is_ascii() { c as u8 } else { b'?' })
+        .collect()
 }

@@ -190,9 +190,10 @@ impl<'a> ShellItem<'a> {
             Self::Uri(u) => u.uri,
             // A GUID we do not recognise gets no name rather than its own hex:
             // `{F02C1A0D-...}` in a breadcrumb is worse than a gap.
-            Self::RootFolder(r) => {
-                r.guid.well_known_name().map(|n| ShellStr::Ansi(n.as_bytes()))
-            }
+            Self::RootFolder(r) => r
+                .guid
+                .well_known_name()
+                .map(|n| ShellStr::Ansi(n.as_bytes())),
             Self::Empty | Self::Unknown { .. } => None,
         }
     }
@@ -286,13 +287,21 @@ impl<'a> Volume<'a> {
                 class,
                 name: Some(ShellStr::Ansi(nul_terminated(field))),
                 // 23..39 only exists on the longer form; absent is normal.
-                guid: data.get(23..).and_then(Guid::from_slice).filter(|g| *g.as_bytes() != [0; 16]),
+                guid: data
+                    .get(23..)
+                    .and_then(Guid::from_slice)
+                    .filter(|g| *g.as_bytes() != [0; 16]),
                 raw: data,
             });
         }
         // A class in the family that neither the document nor the code covers.
         // Still a volume, still worth returning: the bytes are all here.
-        Some(Self { class, name: None, guid: None, raw: data })
+        Some(Self {
+            class,
+            name: None,
+            guid: None,
+            raw: data,
+        })
     }
 }
 
@@ -511,7 +520,13 @@ impl<'a> Uri<'a> {
             Some(ShellStr::Ansi(nul_terminated(tail)))
         };
 
-        Some(Self { class, flags, data: fixed, uri, raw: data })
+        Some(Self {
+            class,
+            flags,
+            data: fixed,
+            uri,
+            raw: data,
+        })
     }
 }
 
@@ -566,7 +581,10 @@ impl<'a> ExtensionBlock<'a> {
     /// Every extension block on this item, in order.
     #[must_use]
     pub fn walk(data: &'a [u8]) -> ExtensionBlocks<'a> {
-        ExtensionBlocks { data, next: Self::find(data).map(|b| b.offset) }
+        ExtensionBlocks {
+            data,
+            next: Self::find(data).map(|b| b.offset),
+        }
     }
 
     fn parse_at(data: &'a [u8], offset: usize) -> Option<Self> {
@@ -582,7 +600,13 @@ impl<'a> ExtensionBlock<'a> {
         if signature & 0xFFFF_0000 != EXTENSION_SIGNATURE_PREFIX {
             return None;
         }
-        Some(Self { offset, size, version, signature, body: &block[8..size] })
+        Some(Self {
+            offset,
+            size,
+            version,
+            signature,
+            body: &block[8..size],
+        })
     }
 
     /// Decode as a `0xBEEF0004` file entry extension, or `None` for any other
@@ -729,7 +753,14 @@ impl<'a> FileEntryExtension<'a> {
             })
         };
 
-        Some(Self { version, created, accessed, file_reference, long_name, localized_name })
+        Some(Self {
+            version,
+            created,
+            accessed,
+            file_reference,
+            long_name,
+            localized_name,
+        })
     }
 }
 

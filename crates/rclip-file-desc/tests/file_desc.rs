@@ -18,7 +18,10 @@ fn fixture(name: &str) -> Vec<u8> {
 }
 
 fn sidecar_expectations() -> Vec<(String, String)> {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/synthetic/rclip-file-desc");
+    let dir = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../corpus/synthetic/rclip-file-desc"
+    );
     let mut out = Vec::new();
     for entry in std::fs::read_dir(dir).expect("corpus dir") {
         let path = entry.expect("dir entry").path();
@@ -47,7 +50,10 @@ fn the_documented_struct_sizes_are_what_we_encode() {
     assert_eq!(DESCRIPTOR_LEN, 592);
     assert_eq!(GROUP_HEADER_LEN + DESCRIPTOR_LEN, 596);
     assert_eq!(FILE_NAME_UNITS, 260, "cFileName is WCHAR[MAX_PATH]");
-    assert_eq!(MAX_WRITABLE_NAME_UNITS, 259, "one unit is reserved for the NUL");
+    assert_eq!(
+        MAX_WRITABLE_NAME_UNITS, 259,
+        "one unit is reserved for the NUL"
+    );
 }
 
 #[test]
@@ -93,7 +99,10 @@ fn every_fixture_matches_its_sidecar() {
                 parsed.unwrap_or_else(|e| panic!("{name} is declared ok but failed: {e}"));
             }
             "error" => {
-                assert!(parsed.is_err(), "{name} is declared error but parsed cleanly");
+                assert!(
+                    parsed.is_err(),
+                    "{name} is declared error but parsed cleanly"
+                );
             }
             other => panic!("{name}: unknown expect value {other:?}"),
         }
@@ -125,7 +134,10 @@ fn two_descriptors_with_different_flag_sets() {
 
     let second = group.get(1).unwrap();
     assert_eq!(second.file_name_lossy(), "Anhänge");
-    assert_eq!(second.clsid(), Some([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]));
+    assert_eq!(
+        second.clsid(),
+        Some([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+    );
     assert_eq!(second.icon_size(), Some(SizeL { cx: 32, cy: 32 }));
     assert_eq!(second.icon_position(), Some(PointL { x: -4, y: 9 }));
     assert_eq!(second.file_attributes(), Some(file_attribute::DIRECTORY));
@@ -144,7 +156,11 @@ fn a_field_whose_flag_is_clear_reads_as_none_not_as_its_bytes() {
     let second = group.get(1).unwrap();
 
     assert_eq!(second.file_size(), None, "FD_FILESIZE is clear");
-    assert_eq!(second.raw().file_size, 0xDEAD_BEEF, "but the bytes are still there");
+    assert_eq!(
+        second.raw().file_size,
+        0xDEAD_BEEF,
+        "but the bytes are still there"
+    );
 }
 
 #[test]
@@ -190,7 +206,11 @@ fn a_descriptor_short_of_its_592_bytes_fails_at_the_count() {
 fn a_missing_c_items_word_is_eof() {
     for len in 0..GROUP_HEADER_LEN {
         let err = FileGroupDescriptor::parse(&[0u8; 4][..len]).unwrap_err();
-        assert_eq!(err.kind, ErrorKind::UnexpectedEof, "{len}-byte payload must not panic");
+        assert_eq!(
+            err.kind,
+            ErrorKind::UnexpectedEof,
+            "{len}-byte payload must not panic"
+        );
     }
 }
 
@@ -210,7 +230,10 @@ fn the_name_stops_at_its_nul_and_not_at_the_end_of_the_field() {
     let group = FileGroupDescriptor::parse(&bytes).unwrap();
     let d = group.get(0).unwrap();
     assert_eq!(d.file_name_utf16().len(), "empty.txt".len() * 2);
-    assert_eq!(d.file_name_chars().map(Result::unwrap).collect::<String>(), "empty.txt");
+    assert_eq!(
+        d.file_name_chars().map(Result::unwrap).collect::<String>(),
+        "empty.txt"
+    );
 }
 
 #[test]
@@ -229,11 +252,15 @@ fn a_name_that_fills_the_field_without_a_nul_still_reads() {
 #[test]
 fn a_descriptor_of_the_wrong_length_is_a_bad_length() {
     assert_eq!(
-        FileDescriptor::parse(&[0u8; DESCRIPTOR_LEN - 1]).unwrap_err().kind,
+        FileDescriptor::parse(&[0u8; DESCRIPTOR_LEN - 1])
+            .unwrap_err()
+            .kind,
         ErrorKind::BadLength
     );
     assert_eq!(
-        FileDescriptor::parse(&[0u8; DESCRIPTOR_LEN + 1]).unwrap_err().kind,
+        FileDescriptor::parse(&[0u8; DESCRIPTOR_LEN + 1])
+            .unwrap_err()
+            .kind,
         ErrorKind::BadLength
     );
 }
@@ -244,7 +271,10 @@ fn get_is_bounded_by_the_declared_count() {
     let group = FileGroupDescriptor::parse(&bytes).unwrap();
     assert!(group.get(1).is_some());
     assert!(group.get(2).is_none());
-    assert!(group.get(usize::MAX).is_none(), "must not overflow when scaling the index");
+    assert!(
+        group.get(usize::MAX).is_none(),
+        "must not overflow when scaling the index"
+    );
 }
 
 #[test]
@@ -264,7 +294,11 @@ fn iter_and_get_agree() {
 
 #[test]
 fn fixtures_round_trip_byte_for_byte() {
-    for name in ["two-descriptors.bin", "zero-length-file.bin", "empty-group.bin"] {
+    for name in [
+        "two-descriptors.bin",
+        "zero-length-file.bin",
+        "empty-group.bin",
+    ] {
         let bytes = fixture(name);
         let group = FileGroupDescriptor::parse(&bytes).unwrap();
         let mut b = Builder::new();
@@ -325,11 +359,22 @@ fn setters_set_the_flag_that_makes_their_field_mean_anything() {
     // descriptor Explorer renders as zero bytes.
     let raw = RawDescriptor::new().with_file_size(1);
     assert!(raw.flags.contains(Flags::FILESIZE));
-    assert!(RawDescriptor::new().with_icon(SizeL::default(), PointL::default()).flags
+    assert!(RawDescriptor::new()
+        .with_icon(SizeL::default(), PointL::default())
+        .flags
         .contains(Flags::SIZEPOINT));
-    assert!(RawDescriptor::new().with_creation_time(1).flags.contains(Flags::CREATETIME));
-    assert!(RawDescriptor::new().with_last_access_time(1).flags.contains(Flags::ACCESSTIME));
-    assert!(RawDescriptor::new().with_clsid([0; 16]).flags.contains(Flags::CLSID));
+    assert!(RawDescriptor::new()
+        .with_creation_time(1)
+        .flags
+        .contains(Flags::CREATETIME));
+    assert!(RawDescriptor::new()
+        .with_last_access_time(1)
+        .flags
+        .contains(Flags::ACCESSTIME));
+    assert!(RawDescriptor::new()
+        .with_clsid([0; 16])
+        .flags
+        .contains(Flags::CLSID));
     assert_eq!(RawDescriptor::new().flags, Flags::NONE);
 }
 
@@ -347,8 +392,14 @@ fn a_name_that_leaves_no_room_for_the_nul_is_refused() {
     b.push(RawDescriptor::new(), &ok).unwrap();
 
     let too_long = "x".repeat(FILE_NAME_UNITS);
-    let err = Builder::new().push(RawDescriptor::new(), &too_long).unwrap_err();
-    assert_eq!(err.kind, ErrorKind::TooLarge, "260 units leaves nowhere for the terminator");
+    let err = Builder::new()
+        .push(RawDescriptor::new(), &too_long)
+        .unwrap_err();
+    assert_eq!(
+        err.kind,
+        ErrorKind::TooLarge,
+        "260 units leaves nowhere for the terminator"
+    );
 }
 
 #[test]
@@ -356,26 +407,40 @@ fn name_length_is_counted_in_utf16_units_not_chars() {
     // An astral char costs two units, so 130 of them fill the field.
     let emoji = "\u{1F4C4}".repeat(130);
     assert_eq!(emoji.chars().count(), 130);
-    let err = Builder::new().push(RawDescriptor::new(), &emoji).unwrap_err();
+    let err = Builder::new()
+        .push(RawDescriptor::new(), &emoji)
+        .unwrap_err();
     assert_eq!(err.kind, ErrorKind::TooLarge);
 
     let just_fits = "\u{1F4C4}".repeat(129);
-    Builder::new().push(RawDescriptor::new(), &just_fits).unwrap();
+    Builder::new()
+        .push(RawDescriptor::new(), &just_fits)
+        .unwrap();
 }
 
 #[test]
 fn an_embedded_nul_in_a_name_is_refused() {
-    let err = Builder::new().push(RawDescriptor::new(), "a\0b.txt").unwrap_err();
-    assert_eq!(err.kind, ErrorKind::Malformed, "it would truncate on the way back in");
+    let err = Builder::new()
+        .push(RawDescriptor::new(), "a\0b.txt")
+        .unwrap_err();
+    assert_eq!(
+        err.kind,
+        ErrorKind::Malformed,
+        "it would truncate on the way back in"
+    );
 
     let name: Vec<u8> = "a\0b".encode_utf16().flat_map(u16::to_le_bytes).collect();
-    let err = Builder::new().push_utf16_name(RawDescriptor::new(), &name).unwrap_err();
+    let err = Builder::new()
+        .push_utf16_name(RawDescriptor::new(), &name)
+        .unwrap_err();
     assert_eq!(err.kind, ErrorKind::Malformed);
 }
 
 #[test]
 fn an_odd_length_utf16_name_is_a_bad_length() {
-    let err = Builder::new().push_utf16_name(RawDescriptor::new(), b"abc").unwrap_err();
+    let err = Builder::new()
+        .push_utf16_name(RawDescriptor::new(), b"abc")
+        .unwrap_err();
     assert_eq!(err.kind, ErrorKind::BadLength);
 }
 

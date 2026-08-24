@@ -52,11 +52,23 @@ pub struct Offer {
 /// that is not text. [`crate::convention::parse_nautilus_text_clipboard`] still
 /// reads it, because old payloads outlive the code that made them.
 pub const RECOMMENDED: [Offer; 4] = [
-    Offer { mime: MIME_URI_LIST, payload: Payload::UriList },
-    Offer { mime: MIME_GNOME_COPIED_FILES, payload: Payload::CopiedFiles },
+    Offer {
+        mime: MIME_URI_LIST,
+        payload: Payload::UriList,
+    },
+    Offer {
+        mime: MIME_GNOME_COPIED_FILES,
+        payload: Payload::CopiedFiles,
+    },
     // MATE's Caja uses its own name for a byte-identical payload.
-    Offer { mime: MIME_MATE_COPIED_FILES, payload: Payload::CopiedFiles },
-    Offer { mime: MIME_KDE_CUT_SELECTION, payload: Payload::KdeCutSelection },
+    Offer {
+        mime: MIME_MATE_COPIED_FILES,
+        payload: Payload::CopiedFiles,
+    },
+    Offer {
+        mime: MIME_KDE_CUT_SELECTION,
+        payload: Payload::KdeCutSelection,
+    },
 ];
 
 /// The `application/x-kde-cutselection` bytes. No allocation needed — the

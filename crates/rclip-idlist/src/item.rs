@@ -109,7 +109,13 @@ impl<'a> ItemIdList<'a> {
     /// caller no longer has, which makes a corpus mismatch much harder to chase.
     #[must_use]
     pub const fn with_base(buf: &'a [u8], base: usize) -> Self {
-        Self { buf, pos: 0, base, state: Walk::Running, terminated: false }
+        Self {
+            buf,
+            pos: 0,
+            base,
+            state: Walk::Running,
+            terminated: false,
+        }
     }
 
     /// Bytes consumed so far, including the terminator once it is reached.
@@ -195,7 +201,10 @@ impl<'a> Iterator for ItemIdList<'a> {
             return Some(Err(Error::new(ErrorKind::UnexpectedEof, here)));
         }
 
-        let item = ItemId { offset: self.pos, data: &rest[MIN_ITEM_SIZE..cb] };
+        let item = ItemId {
+            offset: self.pos,
+            data: &rest[MIN_ITEM_SIZE..cb],
+        };
         self.pos += cb;
         Some(Ok(item))
     }

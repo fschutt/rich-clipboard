@@ -8,7 +8,10 @@ use rclip_core::ErrorKind;
 use rclip_url_file::{parse, HotKey, ShortcutTarget, ShowCommand};
 
 fn fixture(name: &str) -> Vec<u8> {
-    let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/synthetic/rclip-url-file/");
+    let p = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../corpus/synthetic/rclip-url-file/"
+    );
     std::fs::read(format!("{p}{name}")).expect("fixture")
 }
 
@@ -21,7 +24,10 @@ fn reads_every_documented_key() {
     assert_eq!(f.working_directory(), Some(r"C:\WINDOWS\"));
     assert_eq!(f.icon_file(), Some(r"C:\WINDOWS\SYSTEM\url.dll"));
     assert_eq!(f.icon_index().unwrap().unwrap(), 1);
-    assert_eq!(f.show_command().unwrap().unwrap(), ShowCommand::MIN_NO_ACTIVE);
+    assert_eq!(
+        f.show_command().unwrap().unwrap(),
+        ShowCommand::MIN_NO_ACTIVE
+    );
     assert_eq!(f.id_list(), Some(""));
 }
 
@@ -50,7 +56,10 @@ fn modified_is_a_little_endian_filetime_plus_a_trailing_byte() {
         m.filetime, 0x01BD_076D_A06B_F020,
         "the hex reads backwards relative to a FILETIME printed high-word first"
     );
-    assert_eq!(m.trailing, "4D", "the ninth byte is handed back, not validated");
+    assert_eq!(
+        m.trailing, "4D",
+        "the ninth byte is handed back, not validated"
+    );
 }
 
 #[test]
@@ -58,7 +67,10 @@ fn minimal_file_with_lf_terminators_parses() {
     let bytes = fixture("minimal-lf.bin");
     let f = parse(&bytes).unwrap();
     assert_eq!(f.require_url().unwrap(), "https://example.com/");
-    assert_eq!(f.target(), Some(ShortcutTarget::Url("https://example.com/")));
+    assert_eq!(
+        f.target(),
+        Some(ShortcutTarget::Url("https://example.com/"))
+    );
 }
 
 #[test]
@@ -90,8 +102,15 @@ fn section_and_key_names_are_case_insensitive() {
     let bytes = fixture("case-and-quotes.bin");
     let f = parse(&bytes).unwrap();
 
-    assert!(f.internet_shortcut().is_some(), "[internetshortcut] must match");
-    assert_eq!(f.url(), Some("https://example.com/x"), "quotes are stripped, spaces trimmed");
+    assert!(
+        f.internet_shortcut().is_some(),
+        "[internetshortcut] must match"
+    );
+    assert_eq!(
+        f.url(),
+        Some("https://example.com/x"),
+        "quotes are stripped, spaces trimmed"
+    );
     assert_eq!(f.icon_index().unwrap().unwrap(), 2, "0x2 is hex");
 }
 
@@ -99,8 +118,17 @@ fn section_and_key_names_are_case_insensitive() {
 fn semicolon_starts_a_comment_and_hash_does_not() {
     let bytes = fixture("case-and-quotes.bin");
     let f = parse(&bytes).unwrap();
-    let keys: Vec<_> = f.internet_shortcut().unwrap().entries().map(|e| e.key).collect();
-    assert_eq!(keys, vec!["url", "ICONINDEX"], "the ';' line is not an entry");
+    let keys: Vec<_> = f
+        .internet_shortcut()
+        .unwrap()
+        .entries()
+        .map(|e| e.key)
+        .collect();
+    assert_eq!(
+        keys,
+        vec!["url", "ICONINDEX"],
+        "the ';' line is not an entry"
+    );
 }
 
 #[test]
@@ -116,7 +144,10 @@ fn offsets_are_relative_to_the_original_buffer_not_past_the_bom() {
     let f = parse(&bytes).unwrap();
     let entry = f.internet_shortcut().unwrap().entries().next().unwrap();
     // BOM (3) + "[InternetShortcut]\r\n" (20).
-    assert_eq!(entry.offset, 23, "an offset must be findable in a hex dump of the file");
+    assert_eq!(
+        entry.offset, 23,
+        "an offset must be findable in a hex dump of the file"
+    );
 }
 
 #[test]
@@ -124,7 +155,11 @@ fn a_file_without_a_url_is_malformed_only_when_the_url_is_demanded() {
     let bytes = fixture("no-url.bin");
     let f = parse(&bytes).expect("structurally fine, so parse must succeed");
     assert_eq!(f.url(), None);
-    assert_eq!(f.icon_file(), Some(r"C:\x.ico"), "the rest of the file is still readable");
+    assert_eq!(
+        f.icon_file(),
+        Some(r"C:\x.ico"),
+        "the rest of the file is still readable"
+    );
     assert_eq!(f.require_url().unwrap_err().kind, ErrorKind::Malformed);
 }
 
@@ -156,16 +191,32 @@ fn a_drive_letter_is_a_path_not_a_one_letter_url_scheme() {
     // `C:` satisfies RFC 3986's scheme production, so classification order is
     // the whole correctness of this function.
     for (input, want) in [
-        (r"C:\Users\me\x.txt", ShortcutTarget::Path(r"C:\Users\me\x.txt")),
-        (r"\\server\share\x", ShortcutTarget::Path(r"\\server\share\x")),
+        (
+            r"C:\Users\me\x.txt",
+            ShortcutTarget::Path(r"C:\Users\me\x.txt"),
+        ),
+        (
+            r"\\server\share\x",
+            ShortcutTarget::Path(r"\\server\share\x"),
+        ),
         ("/home/me/x", ShortcutTarget::Path("/home/me/x")),
-        ("https://example.com/", ShortcutTarget::Url("https://example.com/")),
+        (
+            "https://example.com/",
+            ShortcutTarget::Url("https://example.com/"),
+        ),
         ("file:///C:/x", ShortcutTarget::Url("file:///C:/x")),
-        ("mailto:a@b.example", ShortcutTarget::Url("mailto:a@b.example")),
+        (
+            "mailto:a@b.example",
+            ShortcutTarget::Url("mailto:a@b.example"),
+        ),
         ("readme.txt", ShortcutTarget::Unresolved("readme.txt")),
         ("", ShortcutTarget::Unresolved("")),
     ] {
-        assert_eq!(ShortcutTarget::classify(input), want, "classifying {input:?}");
+        assert_eq!(
+            ShortcutTarget::classify(input),
+            want,
+            "classifying {input:?}"
+        );
     }
 }
 
@@ -179,7 +230,10 @@ fn a_malformed_modified_value_reports_which_way_it_is_wrong() {
     );
 
     let bad = parse(b"[InternetShortcut]\r\nURL=x:y\r\nModified=ZZZZZZZZZZZZZZZZ\r\n").unwrap();
-    assert_eq!(bad.modified().unwrap().unwrap_err().kind, ErrorKind::Malformed);
+    assert_eq!(
+        bad.modified().unwrap().unwrap_err().kind,
+        ErrorKind::Malformed
+    );
 }
 
 #[test]
@@ -198,7 +252,9 @@ fn an_absent_optional_key_is_none_and_not_an_error() {
 /// generated to a fixed shape, and a dev-dependency on `serde_json` to read one
 /// field would be the largest dependency in the crate.
 fn expect_of(json: &str) -> &str {
-    let at = json.find("\"expect\"").expect("sidecar has an expect field");
+    let at = json
+        .find("\"expect\"")
+        .expect("sidecar has an expect field");
     let rest = &json[at + "\"expect\"".len()..];
     let open = rest.find('"').expect("a value follows");
     let tail = &rest[open + 1..];
@@ -212,7 +268,10 @@ fn expect_of(json: &str) -> &str {
 /// deciding what it means.
 #[test]
 fn every_fixture_matches_its_sidecar() {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/synthetic/rclip-url-file");
+    let dir = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../corpus/synthetic/rclip-url-file"
+    );
     let mut seen = 0usize;
     for entry in std::fs::read_dir(dir).expect("corpus directory") {
         let path = entry.unwrap().path();
@@ -227,9 +286,12 @@ fn every_fixture_matches_its_sidecar() {
 
         match expect_of(&sidecar) {
             "ok" => {
-                let f = parse(&bytes)
-                    .unwrap_or_else(|e| panic!("{stem} claims ok but failed: {e}"));
-                assert!(f.sections().next().is_some(), "{stem}: at least one section");
+                let f =
+                    parse(&bytes).unwrap_or_else(|e| panic!("{stem} claims ok but failed: {e}"));
+                assert!(
+                    f.sections().next().is_some(),
+                    "{stem}: at least one section"
+                );
             }
             "error" => {
                 let failed = match stem.as_str() {
@@ -243,5 +305,8 @@ fn every_fixture_matches_its_sidecar() {
             other => panic!("{stem}: expect must be \"ok\" or \"error\", not {other:?}"),
         }
     }
-    assert_eq!(seen, 8, "a new fixture needs a test that says what it means");
+    assert_eq!(
+        seen, 8,
+        "a new fixture needs a test that says what it means"
+    );
 }

@@ -14,7 +14,10 @@ fn fixture(name: &str) -> Vec<u8> {
 
 /// The `.bin` files and what their sidecars say to expect.
 fn sidecar_expectations() -> Vec<(String, String)> {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/synthetic/rclip-dropfiles");
+    let dir = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../corpus/synthetic/rclip-dropfiles"
+    );
     let mut out = Vec::new();
     for entry in std::fs::read_dir(dir).expect("corpus dir") {
         let path = entry.expect("dir entry").path();
@@ -51,7 +54,10 @@ fn every_fixture_matches_its_sidecar() {
                 parsed.unwrap_or_else(|e| panic!("{name} is declared ok but failed: {e}"));
             }
             "error" => {
-                assert!(parsed.is_err(), "{name} is declared error but parsed cleanly");
+                assert!(
+                    parsed.is_err(),
+                    "{name} is declared error but parsed cleanly"
+                );
             }
             other => panic!("{name}: unknown expect value {other:?}"),
         }
@@ -67,10 +73,20 @@ fn two_wide_paths_decode_including_non_ascii() {
     assert!(!drop.is_non_client());
     assert_eq!(drop.point(), Point::ORIGIN);
     assert_eq!(drop.list_offset(), HEADER_LEN);
-    assert_eq!(drop.count(), 2, "the array terminator must not count as a path");
+    assert_eq!(
+        drop.count(),
+        2,
+        "the array terminator must not count as a path"
+    );
 
     let names: Vec<String> = drop.paths().map(|p| p.to_string_lossy().unwrap()).collect();
-    assert_eq!(names, ["C:\\Users\\felix\\report.pdf", "C:\\Users\\felix\\Bilder\\föö.png"]);
+    assert_eq!(
+        names,
+        [
+            "C:\\Users\\felix\\report.pdf",
+            "C:\\Users\\felix\\Bilder\\föö.png"
+        ]
+    );
 }
 
 #[test]
@@ -87,7 +103,11 @@ fn an_empty_list_is_zero_paths_not_one_empty_path() {
     let bytes = fixture("empty.bin");
     let drop = DropFiles::parse(&bytes).unwrap();
     assert!(drop.is_empty());
-    assert_eq!(drop.count(), 0, "a lone terminator must not decode as an empty filename");
+    assert_eq!(
+        drop.count(),
+        0,
+        "a lone terminator must not decode as an empty filename"
+    );
     assert_eq!(drop.paths().next(), None);
 }
 
@@ -103,9 +123,17 @@ fn drop_point_and_nonclient_flag_survive() {
 fn p_files_is_honoured_rather_than_assumed_to_be_twenty() {
     let bytes = fixture("offset-padded.bin");
     let drop = DropFiles::parse(&bytes).unwrap();
-    assert_eq!(drop.list_offset(), 24, "the fixture puts a four-byte gap after the header");
+    assert_eq!(
+        drop.list_offset(),
+        24,
+        "the fixture puts a four-byte gap after the header"
+    );
     let names: Vec<String> = drop.paths().map(|p| p.to_string_lossy().unwrap()).collect();
-    assert_eq!(names, ["C:\\padded.txt"], "hardcoding 20 would read the padding as text");
+    assert_eq!(
+        names,
+        ["C:\\padded.txt"],
+        "hardcoding 20 would read the padding as text"
+    );
 }
 
 #[test]
@@ -119,15 +147,26 @@ fn ansi_paths_come_back_as_raw_bytes() {
     assert_eq!(paths[0], Path::Ansi(b"C:\\temp1.txt"));
     assert_eq!(paths[1], Path::Ansi(b"C:\\temp2.txt"));
     assert!(!paths[0].is_wide());
-    assert!(paths[0].chars().is_none(), "an ANSI path has no codepage to decode with");
-    assert_eq!(paths[0].to_string_lossy(), None, "guessing a codepage is out of scope");
+    assert!(
+        paths[0].chars().is_none(),
+        "an ANSI path has no codepage to decode with"
+    );
+    assert_eq!(
+        paths[0].to_string_lossy(),
+        None,
+        "guessing a codepage is out of scope"
+    );
 }
 
 #[test]
 fn p_files_past_the_end_is_a_bad_offset_not_a_panic() {
     let bytes = fixture("bad-offset.bin");
     let err = DropFiles::parse(&bytes).unwrap_err();
-    assert_eq!(err.kind, ErrorKind::BadOffset, "pFiles=65536 in a 40-byte buffer");
+    assert_eq!(
+        err.kind,
+        ErrorKind::BadOffset,
+        "pFiles=65536 in a 40-byte buffer"
+    );
 }
 
 #[test]
@@ -148,7 +187,11 @@ fn p_files_pointing_into_the_header_is_rejected() {
     let mut bytes = fixture("single-path-wide.bin");
     bytes[..4].copy_from_slice(&8u32.to_le_bytes());
     let err = DropFiles::parse(&bytes).unwrap_err();
-    assert_eq!(err.kind, ErrorKind::BadOffset, "pFiles below 20 aliases the header");
+    assert_eq!(
+        err.kind,
+        ErrorKind::BadOffset,
+        "pFiles below 20 aliases the header"
+    );
 }
 
 #[test]
@@ -156,7 +199,11 @@ fn a_truncated_header_is_eof() {
     for len in 0..HEADER_LEN {
         let bytes = fixture("single-path-wide.bin");
         let err = DropFiles::parse(&bytes[..len]).unwrap_err();
-        assert_eq!(err.kind, ErrorKind::UnexpectedEof, "{len}-byte header must not panic");
+        assert_eq!(
+            err.kind,
+            ErrorKind::UnexpectedEof,
+            "{len}-byte header must not panic"
+        );
     }
 }
 
@@ -185,10 +232,19 @@ fn trailing_padding_after_the_terminator_is_ignored() {
 
 #[test]
 fn canonical_fixtures_round_trip_byte_for_byte() {
-    for name in ["two-paths-wide.bin", "single-path-wide.bin", "empty.bin", "ansi-two-paths.bin"] {
+    for name in [
+        "two-paths-wide.bin",
+        "single-path-wide.bin",
+        "empty.bin",
+        "ansi-two-paths.bin",
+    ] {
         let bytes = fixture(name);
         let drop = DropFiles::parse(&bytes).unwrap();
-        assert_eq!(drop.to_bytes(), bytes, "{name} should re-serialize identically");
+        assert_eq!(
+            drop.to_bytes(),
+            bytes,
+            "{name} should re-serialize identically"
+        );
     }
 }
 
@@ -197,7 +253,10 @@ fn a_padded_payload_round_trips_semantically_not_byte_wise() {
     let bytes = fixture("offset-padded.bin");
     let drop = DropFiles::parse(&bytes).unwrap();
     let round = drop.to_bytes();
-    assert_ne!(round, bytes, "the gap is dropped in favour of the canonical pFiles=20");
+    assert_ne!(
+        round, bytes,
+        "the gap is dropped in favour of the canonical pFiles=20"
+    );
     let again = DropFiles::parse(&round).unwrap();
     assert_eq!(again.list_offset(), HEADER_LEN);
     assert_eq!(again.raw_list(), drop.raw_list());
@@ -265,18 +324,31 @@ fn an_embedded_nul_is_refused_rather_than_truncating_the_list() {
 #[test]
 fn the_builder_refuses_a_path_in_the_wrong_encoding() {
     let mut b = Builder::wide();
-    assert_eq!(b.push(Path::Ansi(b"C:\\a.txt")).unwrap_err().kind, ErrorKind::Unsupported);
+    assert_eq!(
+        b.push(Path::Ansi(b"C:\\a.txt")).unwrap_err().kind,
+        ErrorKind::Unsupported
+    );
 
     let mut a = Builder::ansi();
-    assert_eq!(a.push(Path::Wide(&wide("C:\\a.txt"))).unwrap_err().kind, ErrorKind::Unsupported);
-    assert_eq!(a.push_str("C:\\a.txt").unwrap_err().kind, ErrorKind::Unsupported);
+    assert_eq!(
+        a.push(Path::Wide(&wide("C:\\a.txt"))).unwrap_err().kind,
+        ErrorKind::Unsupported
+    );
+    assert_eq!(
+        a.push_str("C:\\a.txt").unwrap_err().kind,
+        ErrorKind::Unsupported
+    );
 }
 
 #[test]
 fn an_odd_length_wide_path_is_a_bad_length() {
     let mut b = Builder::wide();
     let err = b.push(Path::Wide(b"abc")).unwrap_err();
-    assert_eq!(err.kind, ErrorKind::BadLength, "UTF-16 comes in two-byte units");
+    assert_eq!(
+        err.kind,
+        ErrorKind::BadLength,
+        "UTF-16 comes in two-byte units"
+    );
 }
 
 #[test]

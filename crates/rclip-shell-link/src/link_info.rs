@@ -109,7 +109,10 @@ impl<'a> LinkInfo<'a> {
 
     /// The volume the target was on, if `VolumeIDAndLocalBasePath` is set.
     pub fn volume_id(&self) -> Result<Option<VolumeId<'a>>> {
-        if !self.flags.contains(LinkInfoFlags::VOLUME_ID_AND_LOCAL_BASE_PATH) {
+        if !self
+            .flags
+            .contains(LinkInfoFlags::VOLUME_ID_AND_LOCAL_BASE_PATH)
+        {
             return Ok(None);
         }
         VolumeId::parse(self.buf, offset_of(self.volume_id_offset)?).map(Some)
@@ -123,7 +126,10 @@ impl<'a> LinkInfo<'a> {
     /// the ANSI form would have been truncated, so the ANSI field is the lossy
     /// one whenever both exist.
     pub fn local_base_path(&self) -> Result<Option<ShellStr<'a>>> {
-        if !self.flags.contains(LinkInfoFlags::VOLUME_ID_AND_LOCAL_BASE_PATH) {
+        if !self
+            .flags
+            .contains(LinkInfoFlags::VOLUME_ID_AND_LOCAL_BASE_PATH)
+        {
             return Ok(None);
         }
         if let Some(off) = self.local_base_path_offset_unicode.filter(|o| *o != 0) {
@@ -144,7 +150,10 @@ impl<'a> LinkInfo<'a> {
     /// The network location the target was on, if
     /// `CommonNetworkRelativeLinkAndPathSuffix` is set.
     pub fn common_network_relative_link(&self) -> Result<Option<CommonNetworkRelativeLink<'a>>> {
-        if !self.flags.contains(LinkInfoFlags::COMMON_NETWORK_RELATIVE_LINK_AND_PATH_SUFFIX) {
+        if !self
+            .flags
+            .contains(LinkInfoFlags::COMMON_NETWORK_RELATIVE_LINK_AND_PATH_SUFFIX)
+        {
             return Ok(None);
         }
         CommonNetworkRelativeLink::parse(
@@ -225,8 +234,11 @@ impl<'a> VolumeId<'a> {
         let drive_type = DriveType(r.u32_le()?);
         let drive_serial_number = r.u32_le()?;
         let volume_label_offset = r.u32_le()?;
-        let volume_label_offset_unicode =
-            if volume_label_offset == 0x0000_0014 { Some(r.u32_le()?) } else { None };
+        let volume_label_offset_unicode = if volume_label_offset == 0x0000_0014 {
+            Some(r.u32_le()?)
+        } else {
+            None
+        };
 
         Ok(Self {
             buf,
@@ -342,12 +354,12 @@ impl<'a> CommonNetworkRelativeLink<'a> {
         // structure would have a hole where DeviceNameOffsetUnicode belongs.
         // Every implementation, and the layout itself, uses NetNameOffset for
         // both.
-        let (net_name_offset_unicode, device_name_offset_unicode) =
-            if net_name_offset > 0x0000_0014 {
-                (Some(r.u32_le()?), Some(r.u32_le()?))
-            } else {
-                (None, None)
-            };
+        let (net_name_offset_unicode, device_name_offset_unicode) = if net_name_offset > 0x0000_0014
+        {
+            (Some(r.u32_le()?), Some(r.u32_le()?))
+        } else {
+            (None, None)
+        };
 
         Ok(Self {
             buf,
@@ -371,7 +383,10 @@ impl<'a> CommonNetworkRelativeLink<'a> {
 
     /// The mapped drive letter, e.g. `D:`. Absent unless `ValidDevice` is set.
     pub fn device_name(&self) -> Result<Option<ShellStr<'a>>> {
-        if !self.flags.contains(CommonNetworkRelativeLinkFlags::VALID_DEVICE) {
+        if !self
+            .flags
+            .contains(CommonNetworkRelativeLinkFlags::VALID_DEVICE)
+        {
             return Ok(None);
         }
         match self.device_name_offset_unicode.filter(|o| *o != 0) {
@@ -431,7 +446,10 @@ impl NetworkProviderType {
     #[must_use]
     pub fn name(self) -> Option<&'static str> {
         let index = self.0.checked_sub(0x001A_0000)? >> 16;
-        WNNC_NET_NAMES.get(index as usize).copied().filter(|n| !n.is_empty())
+        WNNC_NET_NAMES
+            .get(index as usize)
+            .copied()
+            .filter(|n| !n.is_empty())
     }
 }
 
@@ -447,48 +465,48 @@ impl fmt::Debug for NetworkProviderType {
 /// Indexed by `(value - 0x001A0000) >> 16`. The empty string at index 14 is the
 /// `0x00280000` gap.
 static WNNC_NET_NAMES: &[&str] = &[
-    "AVID",         // 0x001A0000
-    "DOCUSPACE",    // 0x001B0000
-    "MANGOSOFT",    // 0x001C0000
-    "SERNET",       // 0x001D0000
-    "RIVERFRONT1",  // 0x001E0000
-    "RIVERFRONT2",  // 0x001F0000
-    "DECORB",       // 0x00200000
-    "PROTSTOR",     // 0x00210000
-    "FJ_REDIR",     // 0x00220000
-    "DISTINCT",     // 0x00230000
-    "TWINS",        // 0x00240000
-    "RDR2SAMPLE",   // 0x00250000
-    "CSC",          // 0x00260000
-    "3IN1",         // 0x00270000
-    "",             // 0x00280000 — unassigned in MS-SHLLINK
-    "EXTENDNET",    // 0x00290000
-    "STAC",         // 0x002A0000
-    "FOXBAT",       // 0x002B0000
-    "YAHOO",        // 0x002C0000
-    "EXIFS",        // 0x002D0000
-    "DAV",          // 0x002E0000
-    "KNOWARE",      // 0x002F0000
-    "OBJECT_DIRE",  // 0x00300000
-    "MASFAX",       // 0x00310000
-    "HOB_NFS",      // 0x00320000
-    "SHIVA",        // 0x00330000
-    "IBMAL",        // 0x00340000
-    "LOCK",         // 0x00350000
-    "TERMSRV",      // 0x00360000
-    "SRT",          // 0x00370000
-    "QUINCY",       // 0x00380000
-    "OPENAFS",      // 0x00390000
-    "AVID1",        // 0x003A0000
-    "DFS",          // 0x003B0000
-    "KWNP",         // 0x003C0000
-    "ZENWORKS",     // 0x003D0000
-    "DRIVEONWEB",   // 0x003E0000
-    "VMWARE",       // 0x003F0000
-    "RSFX",         // 0x00400000
-    "MFILES",       // 0x00410000
-    "MS_NFS",       // 0x00420000
-    "GOOGLE",       // 0x00430000
+    "AVID",        // 0x001A0000
+    "DOCUSPACE",   // 0x001B0000
+    "MANGOSOFT",   // 0x001C0000
+    "SERNET",      // 0x001D0000
+    "RIVERFRONT1", // 0x001E0000
+    "RIVERFRONT2", // 0x001F0000
+    "DECORB",      // 0x00200000
+    "PROTSTOR",    // 0x00210000
+    "FJ_REDIR",    // 0x00220000
+    "DISTINCT",    // 0x00230000
+    "TWINS",       // 0x00240000
+    "RDR2SAMPLE",  // 0x00250000
+    "CSC",         // 0x00260000
+    "3IN1",        // 0x00270000
+    "",            // 0x00280000 — unassigned in MS-SHLLINK
+    "EXTENDNET",   // 0x00290000
+    "STAC",        // 0x002A0000
+    "FOXBAT",      // 0x002B0000
+    "YAHOO",       // 0x002C0000
+    "EXIFS",       // 0x002D0000
+    "DAV",         // 0x002E0000
+    "KNOWARE",     // 0x002F0000
+    "OBJECT_DIRE", // 0x00300000
+    "MASFAX",      // 0x00310000
+    "HOB_NFS",     // 0x00320000
+    "SHIVA",       // 0x00330000
+    "IBMAL",       // 0x00340000
+    "LOCK",        // 0x00350000
+    "TERMSRV",     // 0x00360000
+    "SRT",         // 0x00370000
+    "QUINCY",      // 0x00380000
+    "OPENAFS",     // 0x00390000
+    "AVID1",       // 0x003A0000
+    "DFS",         // 0x003B0000
+    "KWNP",        // 0x003C0000
+    "ZENWORKS",    // 0x003D0000
+    "DRIVEONWEB",  // 0x003E0000
+    "VMWARE",      // 0x003F0000
+    "RSFX",        // 0x00400000
+    "MFILES",      // 0x00410000
+    "MS_NFS",      // 0x00420000
+    "GOOGLE",      // 0x00430000
 ];
 
 /// Convert a wire offset to an index, failing rather than truncating on a

@@ -52,7 +52,9 @@ impl<'a> Cida<'a> {
 
         // cidl + 1 offsets: the parent plus one per child. Checked against the
         // bytes that are actually here before it is used as a loop bound.
-        let entries = count.checked_add(1).ok_or_else(|| r.err(ErrorKind::TooLarge))?;
+        let entries = count
+            .checked_add(1)
+            .ok_or_else(|| r.err(ErrorKind::TooLarge))?;
         r.check_count(entries, 4)?;
 
         Ok(Self { buf, count })
@@ -97,7 +99,9 @@ impl<'a> Cida<'a> {
 
     /// The `index`-th child PIDL, relative to [`Cida::parent`].
     pub fn child(&self, index: usize) -> Result<ItemIdList<'a>> {
-        let entry = index.checked_add(1).ok_or(Error::new(ErrorKind::TooLarge, 0))?;
+        let entry = index
+            .checked_add(1)
+            .ok_or(Error::new(ErrorKind::TooLarge, 0))?;
         if entry > self.count {
             return Err(Error::new(ErrorKind::BadOffset, 0));
         }
@@ -112,7 +116,10 @@ impl<'a> Cida<'a> {
     /// none.
     #[must_use]
     pub fn children(&self) -> CidaChildren<'a> {
-        CidaChildren { cida: self.clone(), next: 0 }
+        CidaChildren {
+            cida: self.clone(),
+            next: 0,
+        }
     }
 
     fn list_at(&self, entry: usize) -> Result<ItemIdList<'a>> {

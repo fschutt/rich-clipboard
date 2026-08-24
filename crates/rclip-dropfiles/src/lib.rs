@@ -189,7 +189,8 @@ impl<'a> DropFiles<'a> {
         // is the start of this buffer — not from the end of the header, and
         // not from the cursor. It is 20 in practice but a producer is free to
         // leave a gap, so honour whatever it says.
-        let list_offset = usize::try_from(p_files).map_err(|_| Error::new(ErrorKind::TooLarge, 0))?;
+        let list_offset =
+            usize::try_from(p_files).map_err(|_| Error::new(ErrorKind::TooLarge, 0))?;
         if list_offset < HEADER_LEN {
             // Below 20 the "path array" aliases the header. Windows would
             // happily read the DWORDs back as text; refuse instead.
@@ -211,7 +212,11 @@ impl<'a> DropFiles<'a> {
         // classic CF_HDROP bug in both directions.
         let mut scan = r.clone();
         loop {
-            let entry = if wide { scan.utf16_nul_bytes()? } else { scan.cstr_bytes()? };
+            let entry = if wide {
+                scan.utf16_nul_bytes()?
+            } else {
+                scan.cstr_bytes()?
+            };
             if entry.is_empty() {
                 break;
             }
@@ -220,7 +225,13 @@ impl<'a> DropFiles<'a> {
         let list_end = scan.pos() - terminator_len;
         let list = r.slice_at(list_offset, list_end - list_offset)?;
 
-        Ok(Self { point, non_client, wide, list_offset, list })
+        Ok(Self {
+            point,
+            non_client,
+            wide,
+            list_offset,
+            list,
+        })
     }
 
     /// The drop point. Screen coordinates when [`Self::is_non_client`],
@@ -260,7 +271,10 @@ impl<'a> DropFiles<'a> {
     /// Iterate the paths. Borrows; allocates nothing.
     #[must_use]
     pub const fn paths(&self) -> Paths<'a> {
-        Paths { rest: self.list, wide: self.wide }
+        Paths {
+            rest: self.list,
+            wide: self.wide,
+        }
     }
 
     /// Number of paths. `O(n)` — it walks the array.
@@ -319,11 +333,21 @@ impl<'a> Iterator for Paths<'a> {
         let (unit, end) = if self.wide {
             (2, wide_nul_pos(self.rest).unwrap_or(self.rest.len()))
         } else {
-            (1, self.rest.iter().position(|&b| b == 0).unwrap_or(self.rest.len()))
+            (
+                1,
+                self.rest
+                    .iter()
+                    .position(|&b| b == 0)
+                    .unwrap_or(self.rest.len()),
+            )
         };
         let (out, tail) = self.rest.split_at(end);
         self.rest = tail.get(unit..).unwrap_or(&[]);
-        Some(if self.wide { Path::Wide(out) } else { Path::Ansi(out) })
+        Some(if self.wide {
+            Path::Wide(out)
+        } else {
+            Path::Ansi(out)
+        })
     }
 }
 
@@ -385,14 +409,24 @@ impl Builder {
     /// A builder for a UTF-16LE list. What any modern producer should emit.
     #[must_use]
     pub const fn wide() -> Self {
-        Self { point: Point::ORIGIN, non_client: false, wide: true, list: Vec::new() }
+        Self {
+            point: Point::ORIGIN,
+            non_client: false,
+            wide: true,
+            list: Vec::new(),
+        }
     }
 
     /// A builder for a system-ANSI list. Only for talking to software that
     /// cannot read `fWide == 1`; you supply the already-encoded bytes.
     #[must_use]
     pub const fn ansi() -> Self {
-        Self { point: Point::ORIGIN, non_client: false, wide: false, list: Vec::new() }
+        Self {
+            point: Point::ORIGIN,
+            non_client: false,
+            wide: false,
+            list: Vec::new(),
+        }
     }
 
     /// Set the drop point. Leave it at [`Point::ORIGIN`] for a clipboard copy.

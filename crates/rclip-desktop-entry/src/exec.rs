@@ -115,7 +115,10 @@ impl FieldCode {
     /// these may appear in a command line.
     #[must_use]
     pub const fn is_document(self) -> bool {
-        matches!(self, Self::SingleFile | Self::FileList | Self::SingleUrl | Self::UrlList)
+        matches!(
+            self,
+            Self::SingleFile | Self::FileList | Self::SingleUrl | Self::UrlList
+        )
     }
 
     /// `true` for the codes §7 says "may only be used as an argument on their
@@ -161,7 +164,10 @@ impl<'a> ExecCommand<'a> {
     /// Split into arguments.
     #[must_use]
     pub const fn args(&self) -> ExecArgs<'a> {
-        ExecArgs { rest: self.raw, offset: self.offset }
+        ExecArgs {
+            rest: self.raw,
+            offset: self.offset,
+        }
     }
 
     /// The program, i.e. the first argument.
@@ -250,7 +256,12 @@ impl<'a> ExecArg<'a> {
     /// Decode the argument into literal characters and field codes.
     #[must_use]
     pub const fn pieces(&self) -> ExecPieces<'a> {
-        ExecPieces { rest: self.raw, offset: self.offset, quoted: self.quoted, done: false }
+        ExecPieces {
+            rest: self.raw,
+            offset: self.offset,
+            quoted: self.quoted,
+            done: false,
+        }
     }
 
     /// The field code, if the whole argument is exactly one.
@@ -376,7 +387,11 @@ impl<'a> Iterator for ExecArgs<'a> {
                 if c == '"' && !escaped {
                     let raw = content.get(..consumed).unwrap_or("");
                     self.bump(consumed + len);
-                    return Some(Ok(ExecArg { raw, offset, quoted: true }));
+                    return Some(Ok(ExecArg {
+                        raw,
+                        offset,
+                        quoted: true,
+                    }));
                 }
                 consumed += len;
             }
@@ -392,7 +407,11 @@ impl<'a> Iterator for ExecArgs<'a> {
         }
         let raw = content.get(..consumed).unwrap_or("");
         self.bump(consumed);
-        Some(Ok(ExecArg { raw, offset, quoted: false }))
+        Some(Ok(ExecArg {
+            raw,
+            offset,
+            quoted: false,
+        }))
     }
 }
 

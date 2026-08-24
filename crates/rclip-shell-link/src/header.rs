@@ -85,7 +85,10 @@ impl ShellLinkHeader {
         let file_size = r.u32_le()?;
         let icon_index = r.i32_le()?;
         let show_command = ShowCommand(r.u32_le()?);
-        let hot_key = HotKey { key: r.u8()?, modifiers: r.u8()? };
+        let hot_key = HotKey {
+            key: r.u8()?,
+            modifiers: r.u8()?,
+        };
 
         // Reserved1 (u16) and Reserved2/3 (u32) follow. The spec says they MUST
         // be zero; real files honour that, but a non-zero reserved field is not
@@ -288,7 +291,12 @@ impl fmt::Debug for LinkFlags {
             }
         }
         if self.unknown_bits() != 0 {
-            write!(f, "{} undefined:{:#X}", if first { ":" } else { " |" }, self.unknown_bits())?;
+            write!(
+                f,
+                "{} undefined:{:#X}",
+                if first { ":" } else { " |" },
+                self.unknown_bits()
+            )?;
         }
         f.write_str(")")
     }

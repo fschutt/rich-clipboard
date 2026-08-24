@@ -112,7 +112,11 @@ enum Encoding {
 
 impl<'a> Chars<'a> {
     const fn new(bytes: &'a [u8], encoding: Encoding) -> Self {
-        Self { bytes, pos: 0, encoding }
+        Self {
+            bytes,
+            pos: 0,
+            encoding,
+        }
     }
 }
 
@@ -278,7 +282,10 @@ mod tests {
     fn lone_utf16be_surrogate_is_an_error() {
         let bytes = [0xD8, 0x3D, 0x00, 0x41];
         let mut it = Text::Utf16Be(&bytes).chars();
-        assert_eq!(it.next().unwrap().unwrap_err().kind, ErrorKind::InvalidUtf16);
+        assert_eq!(
+            it.next().unwrap().unwrap_err().kind,
+            ErrorKind::InvalidUtf16
+        );
     }
 
     #[test]

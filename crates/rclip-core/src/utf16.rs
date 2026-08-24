@@ -20,7 +20,11 @@ pub struct Utf16Le<'a> {
 impl<'a> Utf16Le<'a> {
     #[must_use]
     pub const fn new(bytes: &'a [u8]) -> Self {
-        Self { bytes, pos: 0, done: false }
+        Self {
+            bytes,
+            pos: 0,
+            done: false,
+        }
     }
 
     fn unit(&self, at: usize) -> Option<u16> {
@@ -55,9 +59,8 @@ impl Iterator for Utf16Le<'_> {
                     return Some(Err(Error::new(ErrorKind::InvalidUtf16, at)));
                 }
                 self.pos += 2;
-                let cp = 0x1_0000
-                    + ((u32::from(first) - 0xD800) << 10)
-                    + (u32::from(second) - 0xDC00);
+                let cp =
+                    0x1_0000 + ((u32::from(first) - 0xD800) << 10) + (u32::from(second) - 0xDC00);
                 match char::from_u32(cp) {
                     Some(c) => Some(Ok(c)),
                     None => {

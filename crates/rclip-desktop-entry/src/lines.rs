@@ -59,6 +59,9 @@ impl<'a> Iterator for Lines<'a> {
         };
         self.rest = &self.rest[consumed..];
         self.offset += consumed;
-        Some(Line { text: raw.strip_suffix('\r').unwrap_or(raw), offset })
+        Some(Line {
+            text: raw.strip_suffix('\r').unwrap_or(raw),
+            offset,
+        })
     }
 }

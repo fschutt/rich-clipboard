@@ -46,8 +46,7 @@ impl FileTime {
     /// 1601 clamps to zero, which reads back as "unset".
     #[must_use]
     pub const fn from_unix_seconds(secs: i64) -> Self {
-        let ticks = secs as i128 * Self::TICKS_PER_SECOND as i128
-            + Self::UNIX_EPOCH_TICKS as i128;
+        let ticks = secs as i128 * Self::TICKS_PER_SECOND as i128 + Self::UNIX_EPOCH_TICKS as i128;
         if ticks < 0 {
             Self(0)
         } else {

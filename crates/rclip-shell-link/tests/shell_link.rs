@@ -13,7 +13,10 @@ use rclip_shell_link::{
 };
 
 fn fixture(name: &str) -> Vec<u8> {
-    let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/synthetic/rclip-shell-link/");
+    let p = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../corpus/synthetic/rclip-shell-link/"
+    );
     std::fs::read(format!("{p}{name}")).unwrap_or_else(|e| panic!("fixture {name}: {e}"))
 }
 
@@ -28,7 +31,10 @@ fn a_header_only_link_has_no_optional_sections() {
     assert!(link.target_id_list.is_none());
     assert!(link.link_info.is_none());
     assert!(link.string_data.is_empty());
-    assert!(link.header.hot_key.is_unset(), "no hotkey is the normal case, not an error");
+    assert!(
+        link.header.hot_key.is_unset(),
+        "no hotkey is the normal case, not an error"
+    );
     assert!(link.header.creation_time.is_unset());
     assert_eq!(link.extra_data().count(), 0);
 }
@@ -80,7 +86,10 @@ fn an_unrecognised_show_command_reads_back_as_normal_without_losing_the_raw_valu
     buf[60..64].copy_from_slice(&0x1234u32.to_le_bytes());
 
     let link = ShellLink::parse(&buf).unwrap();
-    assert_eq!(link.header.show_command.0, 0x1234, "the raw value survives for round-tripping");
+    assert_eq!(
+        link.header.show_command.0, 0x1234,
+        "the raw value survives for round-tripping"
+    );
     assert_eq!(
         link.header.show_command.effective(),
         ShowCommand::NORMAL,
@@ -105,7 +114,15 @@ fn hot_key_modifiers_and_key_decode() {
     assert!(hk.has_alt());
     assert!(!hk.has_shift());
     assert_eq!(hk.function_key(), None);
-    assert_eq!(HotKey { key: 0x7B, modifiers: 0 }.function_key(), Some(12), "VK_F12");
+    assert_eq!(
+        HotKey {
+            key: 0x7B,
+            modifiers: 0
+        }
+        .function_key(),
+        Some(12),
+        "VK_F12"
+    );
 }
 
 #[test]
@@ -192,10 +209,16 @@ fn link_info_offsets_are_measured_from_the_structure_and_not_the_file() {
     let link = ShellLink::parse(&buf).expect("well formed");
     let info = link.link_info.expect("HasLinkInfo is set");
 
-    assert_eq!(info.header_size, 0x1C, "ASCII-only, so no Unicode offset fields");
+    assert_eq!(
+        info.header_size, 0x1C,
+        "ASCII-only, so no Unicode offset fields"
+    );
     assert_eq!(info.local_base_path_offset_unicode, None);
 
-    let path = info.local_base_path().unwrap().expect("VolumeIDAndLocalBasePath is set");
+    let path = info
+        .local_base_path()
+        .unwrap()
+        .expect("VolumeIDAndLocalBasePath is set");
     assert_eq!(
         path.as_ascii(),
         Some("C:\\Users\\me\\notes.txt"),
@@ -209,7 +232,10 @@ fn link_info_offsets_are_measured_from_the_structure_and_not_the_file() {
     assert_eq!(vol.drive_type.name(), Some("DRIVE_FIXED"));
     assert_eq!(vol.drive_serial_number, 0x1234_ABCD);
     assert_eq!(vol.volume_label().unwrap().as_ascii(), Some("OS"));
-    assert!(vol.size > 0x10, "MS-SHLLINK 2.3.1: VolumeIDSize MUST be greater than 0x10");
+    assert!(
+        vol.size > 0x10,
+        "MS-SHLLINK 2.3.1: VolumeIDSize MUST be greater than 0x10"
+    );
 }
 
 #[test]
@@ -218,11 +244,20 @@ fn a_network_link_info_yields_the_unc_path_and_the_mapped_drive() {
     let link = ShellLink::parse(&buf).expect("well formed");
     let info = link.link_info.expect("present");
 
-    assert!(info.volume_id().unwrap().is_none(), "no VolumeIDAndLocalBasePath flag");
+    assert!(
+        info.volume_id().unwrap().is_none(),
+        "no VolumeIDAndLocalBasePath flag"
+    );
     assert!(info.local_base_path().unwrap().is_none());
 
-    let net = info.common_network_relative_link().unwrap().expect("present");
-    assert_eq!(net.net_name().unwrap().as_ascii(), Some("\\\\fileserver\\public"));
+    let net = info
+        .common_network_relative_link()
+        .unwrap()
+        .expect("present");
+    assert_eq!(
+        net.net_name().unwrap().as_ascii(),
+        Some("\\\\fileserver\\public")
+    );
     assert_eq!(net.device_name().unwrap().unwrap().as_ascii(), Some("Z:"));
     assert_eq!(net.network_provider_type.name(), Some("DAV"));
     assert_eq!(
@@ -304,7 +339,10 @@ fn a_single_environment_variable_block_parses() {
         }
         other => panic!("expected an environment variable block, got {other:?}"),
     }
-    assert_eq!(link.environment_path().unwrap().to_string_lossy(), "%windir%\\system32\\cmd.exe");
+    assert_eq!(
+        link.environment_path().unwrap().to_string_lossy(),
+        "%windir%\\system32\\cmd.exe"
+    );
 }
 
 #[test]
@@ -342,13 +380,22 @@ fn every_extra_data_block_in_the_full_fixture_parses() {
         }
         other => panic!("expected a console block, got {other:?}"),
     }
-    assert!(matches!(blocks[3], ExtraDataBlock::ConsoleFe { code_page: 932 }));
+    assert!(matches!(
+        blocks[3],
+        ExtraDataBlock::ConsoleFe { code_page: 932 }
+    ));
     assert!(matches!(
         blocks[4],
-        ExtraDataBlock::SpecialFolder { special_folder_id: 0x28, offset: 0x14 }
+        ExtraDataBlock::SpecialFolder {
+            special_folder_id: 0x28,
+            offset: 0x14
+        }
     ));
     match &blocks[5] {
-        ExtraDataBlock::KnownFolder { known_folder_id, offset } => {
+        ExtraDataBlock::KnownFolder {
+            known_folder_id,
+            offset,
+        } => {
             assert_eq!(known_folder_id.well_known_name(), Some("Documents"));
             assert_eq!(*offset, 0x14);
         }
@@ -371,8 +418,15 @@ fn an_unassigned_signature_round_trips_as_unknown_instead_of_failing() {
     let link = ShellLink::parse(&buf).unwrap();
     let unknown = link.find_extra(0xA000_000A).expect("the block is there");
     match unknown {
-        ExtraDataBlock::Unknown { signature, size, body } => {
-            assert_eq!(signature, 0xA000_000A, "unassigned in MS-SHLLINK 10.0 — for now");
+        ExtraDataBlock::Unknown {
+            signature,
+            size,
+            body,
+        } => {
+            assert_eq!(
+                signature, 0xA000_000A,
+                "unassigned in MS-SHLLINK 10.0 — for now"
+            );
             assert_eq!(size as usize, body.len() + 8);
             assert_eq!(body, b"reserved-signature-body");
         }
@@ -384,7 +438,9 @@ fn an_unassigned_signature_round_trips_as_unknown_instead_of_failing() {
 fn the_vista_and_above_id_list_block_has_no_leading_size_field() {
     let buf = fixture("full-featured.bin");
     let link = ShellLink::parse(&buf).unwrap();
-    let block = link.find_extra(extra::SIG_VISTA_AND_ABOVE_ID_LIST).expect("present");
+    let block = link
+        .find_extra(extra::SIG_VISTA_AND_ABOVE_ID_LIST)
+        .expect("present");
     let list = block.id_list().expect("this variant carries one");
     assert_eq!(
         list.count(),
@@ -458,7 +514,10 @@ fn the_extra_data_walk_terminates_on_arbitrary_bytes() {
         let mut steps = 0usize;
         for block in link.extra_data() {
             steps += 1;
-            assert!(steps <= tail.len() + 1, "round {round} failed to make progress");
+            assert!(
+                steps <= tail.len() + 1,
+                "round {round} failed to make progress"
+            );
             match block {
                 Ok(b) => {
                     let _ = b.signature();
@@ -510,7 +569,9 @@ fn whole_file_fuzz_never_panics() {
                 if let Some(info) = &link.link_info {
                     let _ = info.local_base_path();
                     let _ = info.volume_id().map(|v| v.map(|v| v.volume_label()));
-                    let _ = info.common_network_relative_link().map(|n| n.map(|n| n.net_name()));
+                    let _ = info
+                        .common_network_relative_link()
+                        .map(|n| n.map(|n| n.net_name()));
                     let _ = info.common_path_suffix();
                 }
                 if let Some(t) = &link.target_id_list {
@@ -522,7 +583,10 @@ fn whole_file_fuzz_never_panics() {
                 let mut steps = 0usize;
                 for block in link.extra_data() {
                     steps += 1;
-                    assert!(steps <= buf.len(), "extra data walk failed to make progress");
+                    assert!(
+                        steps <= buf.len(),
+                        "extra data walk failed to make progress"
+                    );
                     if block.is_err() {
                         break;
                     }
@@ -578,7 +642,10 @@ fn a_written_link_parses_back_to_what_went_in() {
         .volume(DriveType::FIXED, 0x1234_ABCD, "OS")
         .environment_path("%USERPROFILE%\\notes.txt")
         .show_command(ShowCommand::MAXIMIZED)
-        .hot_key(HotKey { key: b'A', modifiers: HotKey::CONTROL | HotKey::ALT })
+        .hot_key(HotKey {
+            key: b'A',
+            modifiers: HotKey::CONTROL | HotKey::ALT,
+        })
         .file_attributes(FileAttributes::ARCHIVE)
         .times(FileTime(130_092_000_000_000_000), FileTime(0), FileTime(0))
         .build()
@@ -590,7 +657,10 @@ fn a_written_link_parses_back_to_what_went_in() {
     assert_eq!(link.header.icon_index, -3);
     assert_eq!(link.header.show_command, ShowCommand::MAXIMIZED);
     assert_eq!(link.header.hot_key.key_char(), Some('A'));
-    assert!(link.header.file_attributes.contains(FileAttributes::ARCHIVE));
+    assert!(link
+        .header
+        .file_attributes
+        .contains(FileAttributes::ARCHIVE));
     assert_eq!(link.header.creation_time.0, 130_092_000_000_000_000);
 
     let sd = link.string_data;
@@ -603,7 +673,10 @@ fn a_written_link_parses_back_to_what_went_in() {
         "%SystemRoot%\\system32\\shell32.dll"
     );
 
-    let info = link.link_info.as_ref().expect("local_path implies a LinkInfo");
+    let info = link
+        .link_info
+        .as_ref()
+        .expect("local_path implies a LinkInfo");
     assert_eq!(
         info.local_base_path().unwrap().unwrap().as_ascii(),
         Some("C:\\Users\\me\\notes.txt")
@@ -612,7 +685,10 @@ fn a_written_link_parses_back_to_what_went_in() {
     assert_eq!(vol.drive_serial_number, 0x1234_ABCD);
     assert_eq!(vol.volume_label().unwrap().as_ascii(), Some("OS"));
 
-    assert_eq!(link.environment_path().unwrap().to_string_lossy(), "%USERPROFILE%\\notes.txt");
+    assert_eq!(
+        link.environment_path().unwrap().to_string_lossy(),
+        "%USERPROFILE%\\notes.txt"
+    );
 }
 
 #[test]
@@ -620,7 +696,11 @@ fn a_written_link_always_ends_with_the_terminal_block() {
     use rclip_shell_link::ShellLinkBuilder;
 
     let bytes = ShellLinkBuilder::new().name("x").build().unwrap();
-    assert_eq!(&bytes[bytes.len() - 4..], &[0, 0, 0, 0], "the terminal block is easy to forget");
+    assert_eq!(
+        &bytes[bytes.len() - 4..],
+        &[0, 0, 0, 0],
+        "the terminal block is easy to forget"
+    );
 
     let link = ShellLink::parse(&bytes).unwrap();
     assert_eq!(link.extra_data().count(), 0);
@@ -630,7 +710,10 @@ fn a_written_link_always_ends_with_the_terminal_block() {
 fn a_non_ascii_local_path_gets_the_unicode_link_info_header() {
     use rclip_shell_link::ShellLinkBuilder;
 
-    let bytes = ShellLinkBuilder::new().local_path("C:\\Users\\Jörg\\notes.txt").build().unwrap();
+    let bytes = ShellLinkBuilder::new()
+        .local_path("C:\\Users\\Jörg\\notes.txt")
+        .build()
+        .unwrap();
     let link = ShellLink::parse(&bytes).unwrap();
     let info = link.link_info.unwrap();
 
@@ -639,7 +722,10 @@ fn a_non_ascii_local_path_gets_the_unicode_link_info_header() {
         "the Unicode offset fields only exist once LinkInfoHeaderSize reaches 0x24"
     );
     let path = info.local_base_path().unwrap().unwrap();
-    assert!(matches!(path, ShellStr::Utf16(_)), "the Unicode field is preferred when present");
+    assert!(
+        matches!(path, ShellStr::Utf16(_)),
+        "the Unicode field is preferred when present"
+    );
     assert_eq!(path.to_string_lossy(), "C:\\Users\\Jörg\\notes.txt");
 }
 
@@ -650,16 +736,27 @@ fn the_builder_appends_a_missing_id_list_terminator() {
 
     // A one-item list with no terminator, which is what slicing a PIDL out of a
     // CIDA gives you.
-    let unterminated = [0x14u8, 0x00, 0x1F, 0x50, 0xE0, 0x4F, 0xD0, 0x20, 0xEA, 0x3A, 0x69, 0x10,
-        0xA2, 0xD8, 0x08, 0x00, 0x2B, 0x30, 0x30, 0x9D];
+    let unterminated = [
+        0x14u8, 0x00, 0x1F, 0x50, 0xE0, 0x4F, 0xD0, 0x20, 0xEA, 0x3A, 0x69, 0x10, 0xA2, 0xD8, 0x08,
+        0x00, 0x2B, 0x30, 0x30, 0x9D,
+    ];
 
-    let bytes = ShellLinkBuilder::new().target_id_list(&unterminated).build().unwrap();
+    let bytes = ShellLinkBuilder::new()
+        .target_id_list(&unterminated)
+        .build()
+        .unwrap();
     let link = ShellLink::parse(&bytes).unwrap();
     let mut items = link.target_id_list.unwrap().items();
 
-    assert!(matches!(items.next().unwrap().unwrap().parse(), ShellItem::RootFolder(_)));
+    assert!(matches!(
+        items.next().unwrap().unwrap().parse(),
+        ShellItem::RootFolder(_)
+    ));
     assert!(items.next().is_none());
-    assert!(items.is_terminated(), "a LinkTargetIDList without a TerminalID is malformed");
+    assert!(
+        items.is_terminated(),
+        "a LinkTargetIDList without a TerminalID is malformed"
+    );
 }
 
 #[test]
@@ -685,7 +782,10 @@ fn the_builder_refuses_a_path_pair_block_that_would_not_fit() {
 
     let long = "b".repeat(300);
     assert!(
-        ShellLinkBuilder::new().environment_path(&long).build().is_err(),
+        ShellLinkBuilder::new()
+            .environment_path(&long)
+            .build()
+            .is_err(),
         "the ANSI half of the block is a fixed 260 bytes including its NUL"
     );
 }
@@ -703,9 +803,14 @@ fn a_raw_extra_block_round_trips() {
     let link = ShellLink::parse(&bytes).unwrap();
     let blocks: Vec<_> = link.extra_data().map(|b| b.unwrap()).collect();
     assert_eq!(blocks.len(), 2);
-    assert!(matches!(blocks[0], ExtraDataBlock::ConsoleFe { code_page: 932 }));
+    assert!(matches!(
+        blocks[0],
+        ExtraDataBlock::ConsoleFe { code_page: 932 }
+    ));
     match blocks[1] {
-        ExtraDataBlock::Unknown { signature, body, .. } => {
+        ExtraDataBlock::Unknown {
+            signature, body, ..
+        } => {
             assert_eq!(signature, 0xDEAD_BEEF);
             assert_eq!(body, b"vendor payload");
         }
@@ -728,11 +833,30 @@ fn a_written_link_survives_a_round_trip_through_its_own_bytes() {
     let rebuilt = ShellLinkBuilder::new()
         .name(&link.string_data.name.unwrap().to_string_lossy())
         .local_path(
-            &link.link_info.as_ref().unwrap().local_base_path().unwrap().unwrap().to_string_lossy(),
+            &link
+                .link_info
+                .as_ref()
+                .unwrap()
+                .local_base_path()
+                .unwrap()
+                .unwrap()
+                .to_string_lossy(),
         )
         .volume(
-            link.link_info.as_ref().unwrap().volume_id().unwrap().unwrap().drive_type,
-            link.link_info.as_ref().unwrap().volume_id().unwrap().unwrap().drive_serial_number,
+            link.link_info
+                .as_ref()
+                .unwrap()
+                .volume_id()
+                .unwrap()
+                .unwrap()
+                .drive_type,
+            link.link_info
+                .as_ref()
+                .unwrap()
+                .volume_id()
+                .unwrap()
+                .unwrap()
+                .drive_serial_number,
             &link
                 .link_info
                 .as_ref()
@@ -747,5 +871,8 @@ fn a_written_link_survives_a_round_trip_through_its_own_bytes() {
         .build()
         .unwrap();
 
-    assert_eq!(first, rebuilt, "reading and writing must be exact inverses here");
+    assert_eq!(
+        first, rebuilt,
+        "reading and writing must be exact inverses here"
+    );
 }

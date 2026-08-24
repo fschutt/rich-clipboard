@@ -131,19 +131,26 @@ impl<'a> UriList<'a> {
     /// Used by [`convention`] to hand back the URIs that follow a verb line
     /// without re-scanning or copying.
     pub(crate) const fn tail_of(&self, lines: &Lines<'a>) -> Self {
-        Self { src: lines.rest(), base: lines.offset() }
+        Self {
+            src: lines.rest(),
+            base: lines.offset(),
+        }
     }
 
     /// Every comment and URI, in order.
     #[must_use]
     pub const fn entries(&self) -> Entries<'a> {
-        Entries { lines: self.raw_lines() }
+        Entries {
+            lines: self.raw_lines(),
+        }
     }
 
     /// Just the URIs.
     #[must_use]
     pub const fn uris(&self) -> Uris<'a> {
-        Uris { entries: self.entries() }
+        Uris {
+            entries: self.entries(),
+        }
     }
 
     /// The first URI, which for a mapped resolution RFC 2483 says is preceded

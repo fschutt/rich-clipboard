@@ -23,7 +23,10 @@ impl DosDateTime {
     /// little-endian.
     #[must_use]
     pub const fn from_le_bytes(b: [u8; 4]) -> Self {
-        Self { date: u16::from_le_bytes([b[0], b[1]]), time: u16::from_le_bytes([b[2], b[3]]) }
+        Self {
+            date: u16::from_le_bytes([b[0], b[1]]),
+            time: u16::from_le_bytes([b[2], b[3]]),
+        }
     }
 
     #[must_use]

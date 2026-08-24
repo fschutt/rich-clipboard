@@ -80,12 +80,18 @@ fn read_counted<'a>(r: &mut Reader<'a>, unicode: bool) -> Result<ShellStr<'a>> {
     // Widen first. See the module docs: doing this multiply in u16 is the bug.
     let count = usize::from(r.u16_le()?);
     let bytes = if unicode {
-        count.checked_mul(2).ok_or_else(|| r.err(ErrorKind::TooLarge))?
+        count
+            .checked_mul(2)
+            .ok_or_else(|| r.err(ErrorKind::TooLarge))?
     } else {
         count
     };
     let data = r.take(bytes)?;
-    Ok(if unicode { ShellStr::Utf16(data) } else { ShellStr::Ansi(data) })
+    Ok(if unicode {
+        ShellStr::Utf16(data)
+    } else {
+        ShellStr::Ansi(data)
+    })
 }
 
 /// MS-SHLLINK 2.4, new in revision 10.0: every `StringData` field except

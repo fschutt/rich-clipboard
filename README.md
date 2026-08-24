@@ -21,8 +21,29 @@ instant a user presses Ctrl+V.
 
 ## Status
 
-Phase 0. `rclip-core` — the shared flavor registry, bounds-checked reader and error type — is in
-place; format crates are being scaffolded against it.
+Phase 0 complete. Twelve crates, 416 tests, and a synthetic corpus with sidecars for every
+format. Every codec builds for `thumbv7em-none-eabi`, forbids `unsafe`, and takes **no
+dependency beyond `rclip-core`** — that last one was not a rule, it is what seven independent
+prior-art reviews concluded.
+
+| Crate | Format | Platform |
+|---|---|---|
+| `rclip-core` | Flavor registry, bounds-checked reader, errors | all |
+| `rclip-cf-html` | CF_HTML "HTML Format" | win |
+| `rclip-rtf` | RTF 1.9.1, clipboard subset | win, mac |
+| `rclip-dib` | CF_DIB / CF_DIBV5 | win |
+| `rclip-dropfiles` | CF_HDROP / DROPFILES | win |
+| `rclip-file-desc` | FILEGROUPDESCRIPTORW, virtual files | win |
+| `rclip-idlist` | ITEMIDLIST / PIDL / CIDA | win |
+| `rclip-shell-link` | `.lnk` (MS-SHLLINK) | win |
+| `rclip-url-file` | `.url` InternetShortcut | win |
+| `rclip-bookmark` | macOS BookmarkData / alias | mac |
+| `rclip-webloc` | `.webloc` / `.inetloc` | mac |
+| `rclip-uri-list` | text/uri-list + GNOME/KDE cut conventions | x11, wl |
+| `rclip-desktop-entry` | freedesktop `.desktop`, incl. `Type=Link` | x11, wl |
+
+Next: real captures from real applications (`corpus/<platform>/`), `cargo-fuzz` targets, the
+`rich-clipboard` facade, and wiring into azul.
 
 ## License
 

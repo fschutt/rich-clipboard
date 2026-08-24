@@ -157,7 +157,11 @@ fn header_of(text: &str) -> Option<&str> {
     // §3.2: "Group names may contain all ASCII characters except for `[` and
     // `]` and control characters." A `]` inside the name would make the header
     // ambiguous — `[a]b]` could be group `a]b` or group `a` followed by junk.
-    if inner.is_empty() || inner.bytes().any(|b| b == b'[' || b == b']' || b.is_ascii_control()) {
+    if inner.is_empty()
+        || inner
+            .bytes()
+            .any(|b| b == b'[' || b == b']' || b.is_ascii_control())
+    {
         return None;
     }
     Some(inner)
@@ -230,7 +234,9 @@ impl<'a> DesktopFile<'a> {
     /// Every group, in file order.
     #[must_use]
     pub const fn groups(&self) -> Groups<'a> {
-        Groups { lines: Lines::new(self.src, self.base) }
+        Groups {
+            lines: Lines::new(self.src, self.base),
+        }
     }
 
     /// The first group with this exact name. §3 makes case significant, so this
@@ -312,7 +318,8 @@ impl<'a> DesktopFile<'a> {
     /// and call this, not iterate [`DesktopFile::groups`].
     #[must_use]
     pub fn action(&self, id: &str) -> Option<Group<'a>> {
-        self.groups().find(|g| g.name().strip_prefix(GROUP_ACTION_PREFIX) == Some(id))
+        self.groups()
+            .find(|g| g.name().strip_prefix(GROUP_ACTION_PREFIX) == Some(id))
     }
 }
 
@@ -334,13 +341,17 @@ impl<'a> Group<'a> {
     /// Every entry in the group, in file order, localized ones included.
     #[must_use]
     pub const fn entries(&self) -> Entries<'a> {
-        Entries { lines: Lines::new(self.body, self.body_offset) }
+        Entries {
+            lines: Lines::new(self.body, self.body_offset),
+        }
     }
 
     /// The first unpostfixed entry with this key.
     #[must_use]
     pub fn value(&self, key: &str) -> Option<Value<'a>> {
-        self.entries().find(|e| e.key == key && e.locale.is_none()).map(|e| e.value)
+        self.entries()
+            .find(|e| e.key == key && e.locale.is_none())
+            .map(|e| e.value)
     }
 
     /// The best value for `key` under `locale`, per the §5 ladder.
@@ -483,6 +494,10 @@ impl<'a> Iterator for Groups<'a> {
             }
         };
         let body = &from_here[..from_here.len() - body_end.len()];
-        Some(Group { name, body, body_offset })
+        Some(Group {
+            name,
+            body,
+            body_offset,
+        })
     }
 }

@@ -78,12 +78,20 @@ impl<'a> Toc<'a> {
         // it, so it is read and dropped rather than validated — rejecting a
         // bookmark over a field nobody can explain would be a bad trade.
         let _reserved = r.u32_le()?;
-        Ok(Entry { bm: self.bm, raw_key, value_offset, at: self.at + start })
+        Ok(Entry {
+            bm: self.bm,
+            raw_key,
+            value_offset,
+            at: self.at + start,
+        })
     }
 
     #[must_use]
     pub const fn iter(&self) -> EntryIter<'a> {
-        EntryIter { toc: *self, index: 0 }
+        EntryIter {
+            toc: *self,
+            index: 0,
+        }
     }
 
     /// Parse the TOC at payload-relative offset `rel`.
@@ -128,7 +136,13 @@ impl<'a> Toc<'a> {
         r.check_count(count, TOC_ENTRY_LEN)?;
         let entries = r.take(entry_bytes)?;
 
-        Ok(Self { bm: *bm, id, next, at, entries })
+        Ok(Self {
+            bm: *bm,
+            id,
+            next,
+            at,
+            entries,
+        })
     }
 }
 
@@ -270,7 +284,12 @@ impl<'a> TocIter<'a> {
         // TOC — and `next` pointing back at the current TOC is a plain infinite
         // loop, which is exactly what mac_alias does on such a file.
         let budget = bm.data().len() / TOC_HEADER_LEN + 1;
-        Self { bm: *bm, next: first, budget, done: false }
+        Self {
+            bm: *bm,
+            next: first,
+            budget,
+            done: false,
+        }
     }
 }
 

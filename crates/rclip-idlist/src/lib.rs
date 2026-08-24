@@ -121,7 +121,9 @@ pub fn display_path(list: ItemIdList<'_>, separator: &str) -> alloc::string::Str
     let mut out = alloc::string::String::new();
     for item in list {
         let Ok(item) = item else { break };
-        let Some(name) = item.parse().display_name() else { continue };
+        let Some(name) = item.parse().display_name() else {
+            continue;
+        };
         if !out.is_empty() {
             out.push_str(separator);
         }

@@ -63,13 +63,21 @@ impl<'a> Locale<'a> {
         if lang.is_empty() {
             return None;
         }
-        Some(Self { lang, country, modifier })
+        Some(Self {
+            lang,
+            country,
+            modifier,
+        })
     }
 
     /// Build a locale from its parts.
     #[must_use]
     pub const fn new(lang: &'a str, country: Option<&'a str>, modifier: Option<&'a str>) -> Self {
-        Self { lang, country, modifier }
+        Self {
+            lang,
+            country,
+            modifier,
+        }
     }
 
     /// The language subtag, e.g. `sr`.
@@ -96,7 +104,10 @@ impl<'a> Locale<'a> {
     /// only the caller knows the key's base name.
     #[must_use]
     pub const fn candidates(&self) -> Candidates<'a> {
-        Candidates { locale: *self, step: 0 }
+        Candidates {
+            locale: *self,
+            step: 0,
+        }
     }
 
     /// Case-sensitive equality. §3 says "case is significant everywhere in the
@@ -104,9 +115,7 @@ impl<'a> Locale<'a> {
     /// case here would let `Name[DE]` shadow `Name[de]`.
     #[must_use]
     pub fn matches(&self, other: &Locale<'_>) -> bool {
-        self.lang == other.lang
-            && self.country == other.country
-            && self.modifier == other.modifier
+        self.lang == other.lang && self.country == other.country && self.modifier == other.modifier
     }
 
     /// `true` if a key postfix string denotes this exact locale.

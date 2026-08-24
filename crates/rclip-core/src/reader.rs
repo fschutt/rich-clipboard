@@ -83,7 +83,10 @@ impl<'a> Reader<'a> {
 
     /// Consume exactly `n` bytes.
     pub fn take(&mut self, n: usize) -> Result<&'a [u8]> {
-        let end = self.pos.checked_add(n).ok_or_else(|| self.err(ErrorKind::TooLarge))?;
+        let end = self
+            .pos
+            .checked_add(n)
+            .ok_or_else(|| self.err(ErrorKind::TooLarge))?;
         if end > self.buf.len() {
             return Err(self.err(ErrorKind::UnexpectedEof));
         }
@@ -101,7 +104,9 @@ impl<'a> Reader<'a> {
 
     /// Borrow `len` bytes at an absolute offset without moving the cursor.
     pub fn slice_at(&self, offset: usize, len: usize) -> Result<&'a [u8]> {
-        let end = offset.checked_add(len).ok_or(Error::new(ErrorKind::TooLarge, offset))?;
+        let end = offset
+            .checked_add(len)
+            .ok_or(Error::new(ErrorKind::TooLarge, offset))?;
         self.buf
             .get(offset..end)
             .ok_or(Error::new(ErrorKind::BadOffset, offset))
@@ -109,7 +114,9 @@ impl<'a> Reader<'a> {
 
     /// Everything from an absolute offset to the end of the buffer.
     pub fn tail_at(&self, offset: usize) -> Result<&'a [u8]> {
-        self.buf.get(offset..).ok_or(Error::new(ErrorKind::BadOffset, offset))
+        self.buf
+            .get(offset..)
+            .ok_or(Error::new(ErrorKind::BadOffset, offset))
     }
 
     pub fn u8(&mut self) -> Result<u8> {
@@ -140,7 +147,9 @@ impl<'a> Reader<'a> {
 
     pub fn u64_le(&mut self) -> Result<u64> {
         let b = self.take(8)?;
-        Ok(u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]))
+        Ok(u64::from_le_bytes([
+            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+        ]))
     }
 
     pub fn i64_le(&mut self) -> Result<i64> {
@@ -224,7 +233,11 @@ impl<'a> Reader<'a> {
     /// NUL. Win32 structs are full of these — `FILEDESCRIPTORW::cFileName` is
     /// 260 units whether or not the name fills it.
     pub fn utf16_fixed(&mut self, units: usize) -> Result<&'a [u8]> {
-        let raw = self.take(units.checked_mul(2).ok_or_else(|| self.err(ErrorKind::TooLarge))?)?;
+        let raw = self.take(
+            units
+                .checked_mul(2)
+                .ok_or_else(|| self.err(ErrorKind::TooLarge))?,
+        )?;
         let mut end = raw.len();
         let mut i = 0usize;
         while i + 1 < raw.len() {
@@ -243,7 +256,9 @@ impl<'a> Reader<'a> {
     /// This is the guard that keeps `Vec::with_capacity(header.count)` from
     /// being a one-line OOM: check before you trust.
     pub fn check_count(&self, count: usize, stride: usize) -> Result<()> {
-        let need = count.checked_mul(stride).ok_or_else(|| self.err(ErrorKind::TooLarge))?;
+        let need = count
+            .checked_mul(stride)
+            .ok_or_else(|| self.err(ErrorKind::TooLarge))?;
         if need > self.remaining_len() {
             return Err(self.err(ErrorKind::TooLarge));
         }

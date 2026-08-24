@@ -36,7 +36,10 @@ impl HotKey {
     /// Split a raw hot-key word into key and modifiers.
     #[must_use]
     pub const fn from_word(word: u16) -> Self {
-        Self { key: (word & 0x00FF) as u8, modifiers: ((word >> 8) & 0x00FF) as u8 }
+        Self {
+            key: (word & 0x00FF) as u8,
+            modifiers: ((word >> 8) & 0x00FF) as u8,
+        }
     }
 
     /// Recombine into the word as stored.
@@ -94,17 +97,24 @@ pub struct Modified<'a> {
 pub(crate) fn modified(v: &str, offset: usize) -> Result<Modified<'_>> {
     // Eight little-endian bytes is sixteen hex digits; anything shorter is not
     // a FILETIME no matter how it is interpreted.
-    let head = v.get(..16).ok_or(Error::new(ErrorKind::BadLength, offset))?;
+    let head = v
+        .get(..16)
+        .ok_or(Error::new(ErrorKind::BadLength, offset))?;
     let mut bytes = [0u8; 8];
     for (i, slot) in bytes.iter_mut().enumerate() {
-        let pair = head.get(i * 2..i * 2 + 2).ok_or(Error::new(ErrorKind::BadLength, offset))?;
+        let pair = head
+            .get(i * 2..i * 2 + 2)
+            .ok_or(Error::new(ErrorKind::BadLength, offset))?;
         *slot = hex_byte(pair).ok_or(Error::new(ErrorKind::Malformed, offset))?;
     }
     let trailing = v.get(16..).unwrap_or("");
     if !trailing.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(Error::new(ErrorKind::Malformed, offset));
     }
-    Ok(Modified { filetime: u64::from_le_bytes(bytes), trailing })
+    Ok(Modified {
+        filetime: u64::from_le_bytes(bytes),
+        trailing,
+    })
 }
 
 fn hex_byte(pair: &str) -> Option<u8> {

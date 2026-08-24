@@ -140,7 +140,9 @@ impl<'a> UrlFile<'a> {
     }
 
     fn key(&self, key: &str) -> Option<Entry<'a>> {
-        self.internet_shortcut()?.entries().find(|e| e.key.eq_ignore_ascii_case(key))
+        self.internet_shortcut()?
+            .entries()
+            .find(|e| e.key.eq_ignore_ascii_case(key))
     }
 
     /// `URL=` — the only key the format requires.
@@ -160,7 +162,8 @@ impl<'a> UrlFile<'a> {
     ///
     /// [`ErrorKind::Malformed`] when `URL=` is absent.
     pub fn require_url(&self) -> Result<&'a str> {
-        self.url().ok_or(Error::new(ErrorKind::Malformed, self.base))
+        self.url()
+            .ok_or(Error::new(ErrorKind::Malformed, self.base))
     }
 
     /// Where the shortcut points, classified.
@@ -202,7 +205,8 @@ impl<'a> UrlFile<'a> {
     /// [`ErrorKind::TooLarge`] if it does not fit an `i32`.
     #[must_use]
     pub fn icon_index(&self) -> Option<Result<i32>> {
-        self.key("IconIndex").map(|e| fields::int(e.value, e.offset))
+        self.key("IconIndex")
+            .map(|e| fields::int(e.value, e.offset))
     }
 
     /// `HotKey=` — see [`HotKey`] for the bit layout.
@@ -215,8 +219,7 @@ impl<'a> UrlFile<'a> {
     pub fn hotkey(&self) -> Option<Result<HotKey>> {
         self.key("HotKey").map(|e| {
             let raw = fields::uint(e.value, e.offset)?;
-            let word =
-                u16::try_from(raw).map_err(|_| Error::new(ErrorKind::TooLarge, e.offset))?;
+            let word = u16::try_from(raw).map_err(|_| Error::new(ErrorKind::TooLarge, e.offset))?;
             Ok(HotKey::from_word(word))
         })
     }
@@ -228,7 +231,8 @@ impl<'a> UrlFile<'a> {
     /// [`ErrorKind::Malformed`] if the value is not a number.
     #[must_use]
     pub fn show_command(&self) -> Option<Result<ShowCommand>> {
-        self.key("ShowCommand").map(|e| fields::uint(e.value, e.offset).map(ShowCommand))
+        self.key("ShowCommand")
+            .map(|e| fields::uint(e.value, e.offset).map(ShowCommand))
     }
 
     /// `Modified=` — hex `FILETIME`. See [`Modified`].
@@ -239,7 +243,8 @@ impl<'a> UrlFile<'a> {
     /// [`ErrorKind::Malformed`] for a non-hex digit.
     #[must_use]
     pub fn modified(&self) -> Option<Result<Modified<'a>>> {
-        self.key("Modified").map(|e| fields::modified(e.value, e.offset))
+        self.key("Modified")
+            .map(|e| fields::modified(e.value, e.offset))
     }
 
     /// `WorkingDirectory=` — verbatim, never resolved.

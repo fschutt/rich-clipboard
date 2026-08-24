@@ -48,13 +48,17 @@ impl<'a> Section<'a> {
     /// Every `key=value` pair in the section, in file order.
     #[must_use]
     pub const fn entries(&self) -> Entries<'a> {
-        Entries { lines: Lines::new(self.body, self.body_offset) }
+        Entries {
+            lines: Lines::new(self.body, self.body_offset),
+        }
     }
 
     /// The value of the first entry whose key matches, ASCII-case-insensitively.
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&'a str> {
-        self.entries().find(|e| e.key.eq_ignore_ascii_case(key)).map(|e| e.value)
+        self.entries()
+            .find(|e| e.key.eq_ignore_ascii_case(key))
+            .map(|e| e.value)
     }
 }
 
@@ -97,7 +101,9 @@ pub struct Sections<'a> {
 
 impl<'a> Sections<'a> {
     pub(crate) const fn new(src: &'a str, offset: usize) -> Self {
-        Self { lines: Lines::new(src, offset) }
+        Self {
+            lines: Lines::new(src, offset),
+        }
     }
 }
 
@@ -130,7 +136,11 @@ impl<'a> Iterator for Sections<'a> {
             }
         };
         let body = &from_here[..from_here.len() - body_end.len()];
-        Some(Section { name, body, body_offset })
+        Some(Section {
+            name,
+            body,
+            body_offset,
+        })
     }
 }
 
@@ -157,7 +167,11 @@ fn entry_of(line: Line<'_>) -> Option<Entry<'_>> {
     let eq = line.text.find('=')?;
     let key = line.text.get(..eq)?.trim();
     let value = unquote(line.text.get(eq + 1..)?.trim());
-    Some(Entry { key, value, offset: line.offset })
+    Some(Entry {
+        key,
+        value,
+        offset: line.offset,
+    })
 }
 
 /// Strip one matched pair of double quotes, mirroring

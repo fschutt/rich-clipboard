@@ -248,7 +248,10 @@ impl<'a> Array<'a> {
 
     #[must_use]
     pub const fn iter(&self) -> ArrayIter<'a> {
-        ArrayIter { array: *self, index: 0 }
+        ArrayIter {
+            array: *self,
+            index: 0,
+        }
     }
 }
 
@@ -332,7 +335,10 @@ impl<'a> Dict<'a> {
 
     #[must_use]
     pub const fn iter(&self) -> DictIter<'a> {
-        DictIter { dict: *self, index: 0 }
+        DictIter {
+            dict: *self,
+            index: 0,
+        }
     }
 }
 
@@ -416,7 +422,9 @@ fn read_offset(table: &[u8], index: usize, at: usize) -> Result<u32> {
     let start = index
         .checked_mul(4)
         .ok_or(Error::new(ErrorKind::TooLarge, at))?;
-    let end = start.checked_add(4).ok_or(Error::new(ErrorKind::TooLarge, at))?;
+    let end = start
+        .checked_add(4)
+        .ok_or(Error::new(ErrorKind::TooLarge, at))?;
     let b = table
         .get(start..end)
         .ok_or(Error::new(ErrorKind::BadOffset, at))?;

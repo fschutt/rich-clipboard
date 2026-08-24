@@ -6,12 +6,13 @@
 //! where getting it wrong is dangerous.
 
 use rclip_core::ErrorKind;
-use rclip_desktop_entry::{
-    parse, EntryType, ExecPiece, FieldCode, Locale, ShortcutTarget, Value,
-};
+use rclip_desktop_entry::{parse, EntryType, ExecPiece, FieldCode, Locale, ShortcutTarget, Value};
 
 fn fixture(name: &str) -> Vec<u8> {
-    let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/synthetic/rclip-desktop-entry/");
+    let p = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../corpus/synthetic/rclip-desktop-entry/"
+    );
     std::fs::read(format!("{p}{name}")).expect("fixture")
 }
 
@@ -26,7 +27,10 @@ fn a_type_link_entry_is_a_shortcut() {
     let bytes = fixture("link-simple.bin");
     let f = parse(&bytes).unwrap();
     assert_eq!(f.entry_type(), Some(EntryType::Link));
-    assert_eq!(f.target(), Some(ShortcutTarget::Url("https://example.com/")));
+    assert_eq!(
+        f.target(),
+        Some(ShortcutTarget::Url("https://example.com/"))
+    );
     assert_eq!(collect(f.url().unwrap()), "https://example.com/");
 }
 
@@ -51,16 +55,22 @@ fn an_unknown_type_is_reported_rather_than_rejected() {
 fn a_bom_and_crlf_terminators_do_not_hide_the_group() {
     let bytes = fixture("crlf-and-bom.bin");
     let f = parse(&bytes).unwrap();
-    assert!(f.desktop_entry().is_some(), "the group name must not keep a trailing CR");
-    assert_eq!(f.target(), Some(ShortcutTarget::Url("https://example.org/")));
+    assert!(
+        f.desktop_entry().is_some(),
+        "the group name must not keep a trailing CR"
+    );
+    assert_eq!(
+        f.target(),
+        Some(ShortcutTarget::Url("https://example.org/"))
+    );
 }
 
 // ------------------------------------------------------------------ escapes
 
 #[test]
 fn the_escape_table_from_section_4_is_complete() {
-    let f = parse(b"[Desktop Entry]\nType=Link\nURL=x:y\nComment=a\\sb\\nc\\td\\re\\\\f\n")
-        .unwrap();
+    let f =
+        parse(b"[Desktop Entry]\nType=Link\nURL=x:y\nComment=a\\sb\\nc\\td\\re\\\\f\n").unwrap();
     assert_eq!(
         collect(f.desktop_entry().unwrap().value("Comment").unwrap()),
         "a b\nc\td\re\\f",
@@ -73,7 +83,10 @@ fn escapes_decode_in_a_real_file() {
     let bytes = fixture("escaped-list.bin");
     let g = parse(&bytes).unwrap().desktop_entry().unwrap();
     assert_eq!(collect(g.value("Name").unwrap()), "Escaped Space");
-    assert_eq!(collect(g.value("Comment").unwrap()), "Line one\nline two\ttabbed");
+    assert_eq!(
+        collect(g.value("Comment").unwrap()),
+        "Line one\nline two\ttabbed"
+    );
 }
 
 #[test]
@@ -99,8 +112,17 @@ fn a_dangling_backslash_does_not_eat_the_next_key() {
     let f = parse(&bytes).expect("structurally valid, so parse must succeed");
     let g = f.desktop_entry().unwrap();
 
-    let err = g.value("Name").unwrap().chars().find_map(Result::err).expect("must fail");
-    assert_eq!(err.kind, ErrorKind::UnexpectedEof, "the escape ran off the end of the value");
+    let err = g
+        .value("Name")
+        .unwrap()
+        .chars()
+        .find_map(Result::err)
+        .expect("must fail");
+    assert_eq!(
+        err.kind,
+        ErrorKind::UnexpectedEof,
+        "the escape ran off the end of the value"
+    );
 
     assert_eq!(
         g.value("Exec").unwrap().raw(),
@@ -147,8 +169,13 @@ fn a_trailing_semicolon_terminates_rather_than_adding_an_empty_item() {
     for (raw, want) in cases {
         let src = format!("[Desktop Entry]\nType=Application\nCategories={raw}\n");
         let f = parse(src.as_bytes()).unwrap();
-        let got: Vec<String> =
-            f.desktop_entry().unwrap().list("Categories").unwrap().map(collect).collect();
+        let got: Vec<String> = f
+            .desktop_entry()
+            .unwrap()
+            .list("Categories")
+            .unwrap()
+            .map(collect)
+            .collect();
         assert_eq!(&got, want, "splitting {raw:?}");
     }
 }
@@ -157,8 +184,13 @@ fn a_trailing_semicolon_terminates_rather_than_adding_an_empty_item() {
 fn a_doubled_backslash_before_a_semicolon_still_separates() {
     // `\;` is a literal backslash followed by a real separator.
     let f = parse(b"[Desktop Entry]\nType=Application\nCategories=a\\\\;b;\n").unwrap();
-    let got: Vec<String> =
-        f.desktop_entry().unwrap().list("Categories").unwrap().map(collect).collect();
+    let got: Vec<String> = f
+        .desktop_entry()
+        .unwrap()
+        .list("Categories")
+        .unwrap()
+        .map(collect)
+        .collect();
     assert_eq!(got, vec!["a\\", "b"]);
 }
 
@@ -199,8 +231,8 @@ fn every_rung_of_the_ladder_is_tried() {
 fn a_request_without_a_modifier_never_matches_a_key_with_one() {
     // Section 5: "If LC_MESSAGES does not have a MODIFIER field, then no key
     // with a modifier will be matched."
-    let f = parse(b"[Desktop Entry]\nType=Application\nName=Default\nName[sr@Latn]=Latin\n")
-        .unwrap();
+    let f =
+        parse(b"[Desktop Entry]\nType=Application\nName=Default\nName[sr@Latn]=Latin\n").unwrap();
     let l = Locale::parse("sr").unwrap();
     assert_eq!(collect(f.name(Some(&l)).unwrap()), "Default");
 }
@@ -210,7 +242,11 @@ fn the_encoding_is_ignored_on_both_sides() {
     let bytes = fixture("localized-names.bin");
     let f = parse(&bytes).unwrap();
     let l = Locale::parse("sr_YU.UTF-8@Latn").unwrap();
-    assert_eq!(l.country(), Some("YU"), "the codeset must not end up in the country");
+    assert_eq!(
+        l.country(),
+        Some("YU"),
+        "the codeset must not end up in the country"
+    );
     assert_eq!(l.modifier(), Some("Latn"));
     assert_eq!(collect(f.name(Some(&l)).unwrap()), "Foo sr_YU");
 }
@@ -285,8 +321,12 @@ fn an_escaped_space_separates_arguments() {
     // treats that space as a separator — which is why section 7 says an
     // argument containing a space "must be quoted".
     let f = parse(b"[Desktop Entry]\nType=Application\nExec=foo\\sbar\n").unwrap();
-    let args: Vec<_> =
-        f.exec().unwrap().args().map(|a| a.unwrap().raw().to_string()).collect();
+    let args: Vec<_> = f
+        .exec()
+        .unwrap()
+        .args()
+        .map(|a| a.unwrap().raw().to_string())
+        .collect();
     assert_eq!(args, vec!["foo", "bar"]);
 }
 
@@ -343,8 +383,14 @@ fn an_unlisted_field_code_is_rejected() {
 fn validate_enforces_the_rules_that_span_the_command_line() {
     let cases: &[(&str, &str)] = &[
         ("p %f %U", "at most one of %f %u %F %U"),
-        ("p --files=%U", "%U may only be used as an argument on its own"),
-        (r#"p "%U""#, "field codes must not be used inside a quoted argument"),
+        (
+            "p --files=%U",
+            "%U may only be used as an argument on its own",
+        ),
+        (
+            r#"p "%U""#,
+            "field codes must not be used inside a quoted argument",
+        ),
     ];
     for (exec, why) in cases {
         let src = format!("[Desktop Entry]\nType=Application\nExec={exec}\n");
@@ -433,7 +479,11 @@ fn lossy_unescaping_keeps_an_invalid_sequence_verbatim() {
     let f = parse(b"[Desktop Entry]\nType=Link\nURL=x:y\nComment=a\\qb\\sc\\\n").unwrap();
     let v = f.desktop_entry().unwrap().value("Comment").unwrap();
     assert!(v.to_unescaped().is_err(), "strict decoding still fails");
-    assert_eq!(v.to_unescaped_lossy(), "a\\qb c\\", "and the display path keeps going");
+    assert_eq!(
+        v.to_unescaped_lossy(),
+        "a\\qb c\\",
+        "and the display path keeps going"
+    );
 }
 
 // ---------------------------------------------------------------- sidecars
@@ -442,7 +492,9 @@ fn lossy_unescaping_keeps_an_invalid_sequence_verbatim() {
 /// generated to a fixed shape, and a dev-dependency on `serde_json` to read one
 /// field would be the largest dependency in the crate.
 fn expect_of(json: &str) -> &str {
-    let at = json.find("\"expect\"").expect("sidecar has an expect field");
+    let at = json
+        .find("\"expect\"")
+        .expect("sidecar has an expect field");
     let rest = &json[at + "\"expect\"".len()..];
     let open = rest.find('"').expect("a value follows");
     let tail = &rest[open + 1..];
@@ -456,7 +508,10 @@ fn expect_of(json: &str) -> &str {
 /// deciding what it means.
 #[test]
 fn every_fixture_matches_its_sidecar() {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/synthetic/rclip-desktop-entry");
+    let dir = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../corpus/synthetic/rclip-desktop-entry"
+    );
     let mut seen = 0usize;
     for entry in std::fs::read_dir(dir).expect("corpus directory") {
         let path = entry.unwrap().path();
@@ -471,8 +526,8 @@ fn every_fixture_matches_its_sidecar() {
 
         match expect_of(&sidecar) {
             "ok" => {
-                let f = parse(&bytes)
-                    .unwrap_or_else(|e| panic!("{stem} claims ok but failed: {e}"));
+                let f =
+                    parse(&bytes).unwrap_or_else(|e| panic!("{stem} claims ok but failed: {e}"));
                 assert!(
                     f.desktop_entry().is_some(),
                     "{stem}: every well-formed entry has a [Desktop Entry] group"
@@ -494,5 +549,8 @@ fn every_fixture_matches_its_sidecar() {
             other => panic!("{stem}: expect must be \"ok\" or \"error\", not {other:?}"),
         }
     }
-    assert_eq!(seen, 11, "a new fixture needs a test that says what it means");
+    assert_eq!(
+        seen, 11,
+        "a new fixture needs a test that says what it means"
+    );
 }

@@ -4,7 +4,10 @@ use rclip_core::ErrorKind;
 use rclip_webloc::{Encoding, Text, Webloc};
 
 fn fixture(name: &str) -> Vec<u8> {
-    let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/synthetic/rclip-webloc/");
+    let p = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../corpus/synthetic/rclip-webloc/"
+    );
     std::fs::read(format!("{p}{name}")).expect("fixture")
 }
 
@@ -19,7 +22,11 @@ fn finder_created_xml_webloc() {
     let bytes = fixture("finder-created.bin");
     let loc = Webloc::parse(&bytes).expect("real Finder output");
 
-    assert_eq!(loc.encoding(), Encoding::Xml, "Finder's scripting API writes XML");
+    assert_eq!(
+        loc.encoding(),
+        Encoding::Xml,
+        "Finder's scripting API writes XML"
+    );
     assert_eq!(decode(loc.url()), "https://example.com/rich-clipboard");
     assert_eq!(
         loc.url().as_str(),
@@ -49,7 +56,11 @@ fn both_encodings_of_the_same_file_agree() {
     let b = Webloc::parse(&bin).unwrap();
 
     assert_ne!(a.encoding(), b.encoding());
-    assert_eq!(decode(a.url()), decode(b.url()), "encoding must not change the value");
+    assert_eq!(
+        decode(a.url()),
+        decode(b.url()),
+        "encoding must not change the value"
+    );
 }
 
 #[test]
@@ -59,7 +70,10 @@ fn xml_entities_are_decoded() {
 
     // Every URL with two query parameters has an escaped '&' in it, so this is
     // the ordinary case rather than an exotic one.
-    assert_eq!(decode(loc.url()), "https://example.com/s?q=a&b<c>d&e=\"f\"&gA");
+    assert_eq!(
+        decode(loc.url()),
+        "https://example.com/s?q=a&b<c>d&e=\"f\"&gA"
+    );
     assert!(
         loc.url().is_encoded(),
         "an escaped value must not pretend its raw bytes are the answer"
@@ -120,7 +134,10 @@ fn a_plist_without_a_url_key_is_rejected() {
     // Detection succeeds — it really is a plist — and parsing still has to
     // fail, because URL is the entire content of the format.
     assert_eq!(Webloc::detect(&bytes), Some(Encoding::Xml));
-    assert_eq!(Webloc::parse(&bytes).unwrap_err().kind, ErrorKind::Malformed);
+    assert_eq!(
+        Webloc::parse(&bytes).unwrap_err().kind,
+        ErrorKind::Malformed
+    );
 }
 
 #[test]
@@ -130,12 +147,18 @@ fn truncated_binary_plist_is_rejected() {
     // 32 bytes of object data parsed as a trailer — so the failure is a
     // structural one, not an EOF.
     let bytes = fixture("bplist-truncated.bin");
-    assert_eq!(Webloc::parse(&bytes).unwrap_err().kind, ErrorKind::Malformed);
+    assert_eq!(
+        Webloc::parse(&bytes).unwrap_err().kind,
+        ErrorKind::Malformed
+    );
 
     // Below header-plus-trailer there is not room for both, and that much a
     // length check does catch.
     let short = fixture("bplist-too-short.bin");
-    assert_eq!(Webloc::parse(&short).unwrap_err().kind, ErrorKind::UnexpectedEof);
+    assert_eq!(
+        Webloc::parse(&short).unwrap_err().kind,
+        ErrorKind::UnexpectedEof
+    );
 }
 
 #[test]
@@ -154,7 +177,10 @@ fn self_referential_dictionary_does_not_hang() {
 #[test]
 fn object_offset_past_the_end_is_rejected() {
     let bytes = fixture("bplist-offset-past-end.bin");
-    assert_eq!(Webloc::parse(&bytes).unwrap_err().kind, ErrorKind::BadOffset);
+    assert_eq!(
+        Webloc::parse(&bytes).unwrap_err().kind,
+        ErrorKind::BadOffset
+    );
 }
 
 #[test]
@@ -194,7 +220,10 @@ fn corrupting_one_byte_never_panics() {
 
 #[test]
 fn every_fixture_matches_its_sidecar() {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/synthetic/rclip-webloc/");
+    let dir = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../corpus/synthetic/rclip-webloc/"
+    );
     let mut checked = 0;
     for entry in std::fs::read_dir(dir).expect("corpus dir") {
         let path = entry.unwrap().path();
@@ -215,7 +244,10 @@ fn every_fixture_matches_its_sidecar() {
         );
         checked += 1;
     }
-    assert!(checked >= 10, "expected the whole synthetic corpus, saw {checked}");
+    assert!(
+        checked >= 10,
+        "expected the whole synthetic corpus, saw {checked}"
+    );
 }
 
 #[cfg(feature = "alloc")]

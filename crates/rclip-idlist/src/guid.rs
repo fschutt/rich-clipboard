@@ -82,7 +82,10 @@ impl Guid {
     #[must_use]
     pub fn well_known_name(&self) -> Option<&'static str> {
         let s = self.to_braced();
-        WELL_KNOWN.iter().find(|(g, _)| *g == s.as_str()).map(|(_, n)| *n)
+        WELL_KNOWN
+            .iter()
+            .find(|(g, _)| *g == s.as_str())
+            .map(|(_, n)| *n)
     }
 }
 
@@ -136,8 +139,14 @@ static WELL_KNOWN: &[(&str, &str)] = &[
     ("{1F3427C8-5C10-4210-AA03-2EE45287D668}", "User Pinned"),
     ("{208D2C60-3AEA-1069-A2D7-08002B30309D}", "Network"),
     ("{20D04FE0-3AEA-1069-A2D8-08002B30309D}", "My Computer"),
-    ("{21EC2020-3AEA-1069-A2DD-08002B30309D}", "All Control Panel Items"),
-    ("{2227A280-3AEA-1069-A2DE-08002B30309D}", "Printers and Faxes"),
+    (
+        "{21EC2020-3AEA-1069-A2DD-08002B30309D}",
+        "All Control Panel Items",
+    ),
+    (
+        "{2227A280-3AEA-1069-A2DE-08002B30309D}",
+        "Printers and Faxes",
+    ),
     ("{26EE0668-A00A-44D7-9371-BEB064C98683}", "Control Panel"),
     ("{33E28130-4E1E-4676-835A-98395C3BC3BB}", "Pictures"),
     ("{374DE290-123F-4565-9164-39C4925E467B}", "Downloads"),
@@ -150,16 +159,34 @@ static WELL_KNOWN: &[(&str, &str)] = &[
     ("{679F85CB-0220-4080-B29B-5540CC05AAB6}", "Quick Access"),
     ("{871C5380-42A0-1069-A2EA-08002B30309D}", "Internet Folder"),
     ("{9343812E-1C37-4A49-A12E-4B2D810D956B}", "Search Home"),
-    ("{B155BDF8-02F0-451E-9A26-AE317CFD7779}", "Computer delegate folder"),
+    (
+        "{B155BDF8-02F0-451E-9A26-AE317CFD7779}",
+        "Computer delegate folder",
+    ),
     ("{B4BFCC3A-DB2C-424C-B029-7FE99A87C641}", "Desktop"),
     ("{BD84B380-8CA2-1069-AB1D-08000948F534}", "Fonts"),
     ("{D20EA4E1-3957-11D2-A40B-0C5020524152}", "Fonts"),
-    ("{D20EA4E1-3957-11D2-A40B-0C5020524153}", "Administrative Tools"),
-    ("{DFFACDC5-679F-4156-8947-C5C76BC0B67F}", "Users Files delegate folder"),
-    ("{E88DCCE0-B7B3-11D1-A9F0-00AA0060FA31}", "Compressed Folder"),
+    (
+        "{D20EA4E1-3957-11D2-A40B-0C5020524153}",
+        "Administrative Tools",
+    ),
+    (
+        "{DFFACDC5-679F-4156-8947-C5C76BC0B67F}",
+        "Users Files delegate folder",
+    ),
+    (
+        "{E88DCCE0-B7B3-11D1-A9F0-00AA0060FA31}",
+        "Compressed Folder",
+    ),
     ("{ED228FDF-9EA8-4870-83B1-96B02CFE0D52}", "Games Explorer"),
-    ("{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}", "Computers and Devices"),
+    (
+        "{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}",
+        "Computers and Devices",
+    ),
     ("{F5FB2C77-0E2F-4A16-A381-3E560C68BC83}", "Removable Drives"),
-    ("{FBF23B42-E3F0-101B-8488-00AA003E56F8}", "Internet Explorer"),
+    (
+        "{FBF23B42-E3F0-101B-8488-00AA003E56F8}",
+        "Internet Explorer",
+    ),
     ("{FDD39AD0-238F-46AF-ADB4-6C85480369C7}", "Documents"),
 ];

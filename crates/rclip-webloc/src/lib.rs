@@ -140,7 +140,11 @@ impl<'a> Webloc<'a> {
 
     fn parse_binary(buf: &'a [u8]) -> Result<Self> {
         let plist = BinaryPlist::parse(buf)?;
-        let bplist::Object::Dict { keys, values, count } = plist.object(plist.top_object(), 0)?
+        let bplist::Object::Dict {
+            keys,
+            values,
+            count,
+        } = plist.object(plist.top_object(), 0)?
         else {
             // The root of a location file is a dictionary. An array or a bare
             // string at the root is a valid plist and not a .webloc.

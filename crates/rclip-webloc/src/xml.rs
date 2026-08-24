@@ -197,7 +197,12 @@ pub struct Entries<'a> {
 impl<'a> Entries<'a> {
     #[must_use]
     pub const fn new(doc: &'a str) -> Self {
-        Self { scanner: Scanner::new(doc), depth: 0, pending_key: None, done: false }
+        Self {
+            scanner: Scanner::new(doc),
+            depth: 0,
+            pending_key: None,
+            done: false,
+        }
     }
 
     fn step(&mut self) -> Option<Result<(Text<'a>, Text<'a>)>> {
@@ -324,7 +329,10 @@ mod tests {
 
     #[test]
     fn self_closing_string_is_an_empty_value() {
-        assert_pairs("<plist><dict><key>URL</key><string/></dict></plist>", &[("URL", "")]);
+        assert_pairs(
+            "<plist><dict><key>URL</key><string/></dict></plist>",
+            &[("URL", "")],
+        );
     }
 
     #[test]

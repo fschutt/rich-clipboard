@@ -92,7 +92,7 @@
 
 use rclip_core::{Error, ErrorKind, Result};
 
-use crate::{Uris, UriList};
+use crate::{UriList, Uris};
 
 /// `text/uri-list` (RFC 2483 §5).
 pub const MIME_URI_LIST: &str = "text/uri-list";
@@ -190,9 +190,12 @@ pub fn parse_copied_files(bytes: &[u8]) -> Result<CopiedFiles<'_>> {
     let Some(first) = lines.next() else {
         return Err(Error::new(ErrorKind::UnexpectedEof, 0));
     };
-    let action = action_of(first.text)
-        .ok_or_else(|| Error::new(ErrorKind::BadMagic, first.offset))?;
-    Ok(CopiedFiles { action, uris: list.tail_of(&lines) })
+    let action =
+        action_of(first.text).ok_or_else(|| Error::new(ErrorKind::BadMagic, first.offset))?;
+    Ok(CopiedFiles {
+        action,
+        uris: list.tail_of(&lines),
+    })
 }
 
 /// Parse the legacy Nautilus 3.30–3.38 `text/plain` payload.
@@ -214,11 +217,17 @@ pub fn parse_nautilus_text_clipboard(bytes: &[u8]) -> Result<CopiedFiles<'_>> {
         return Err(Error::new(ErrorKind::BadMagic, magic.offset));
     }
     let Some(verb) = lines.next() else {
-        return Err(Error::new(ErrorKind::UnexpectedEof, magic.offset + magic.text.len()));
+        return Err(Error::new(
+            ErrorKind::UnexpectedEof,
+            magic.offset + magic.text.len(),
+        ));
     };
     let action =
         action_of(verb.text).ok_or_else(|| Error::new(ErrorKind::BadMagic, verb.offset))?;
-    Ok(CopiedFiles { action, uris: list.tail_of(&lines) })
+    Ok(CopiedFiles {
+        action,
+        uris: list.tail_of(&lines),
+    })
 }
 
 /// `true` if a payload looks like the legacy Nautilus text clipboard.

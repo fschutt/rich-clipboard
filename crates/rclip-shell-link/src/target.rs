@@ -29,7 +29,10 @@ impl<'a> LinkTargetIdList<'a> {
         // take() bounds the inner list to its declared extent, so a malformed
         // IDList cannot walk into the LinkInfo that follows it.
         let bytes = r.take(usize::from(id_list_size))?;
-        Ok(Self { id_list_size, bytes })
+        Ok(Self {
+            id_list_size,
+            bytes,
+        })
     }
 
     /// The `IDList` bytes, terminator included.

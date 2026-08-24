@@ -157,7 +157,13 @@ impl<'a> Bookmark<'a> {
             .ok_or(Error::new(ErrorKind::UnexpectedEof, size))?;
         let first_toc = Reader::new(data).peek_u32_le_at(header_size)?;
 
-        Ok(Self { data, header_size, magic, version, first_toc })
+        Ok(Self {
+            data,
+            header_size,
+            magic,
+            version,
+            first_toc,
+        })
     }
 
     /// Which signature the blob carries.
@@ -252,7 +258,9 @@ impl<'a> Bookmark<'a> {
                 // to keep every offset this crate returns an index into the
                 // caller's buffer.
                 let mut d = Reader::new(data);
-                let secs = d.f64_be().map_err(|_| Error::new(ErrorKind::BadLength, at))?;
+                let secs = d
+                    .f64_be()
+                    .map_err(|_| Error::new(ErrorKind::BadLength, at))?;
                 Ok(Value::Date(Date::from_absolute_seconds(secs)))
             }
             ty::BOOLEAN => Ok(Value::Bool(subtype != 0)),
@@ -263,13 +271,23 @@ impl<'a> Bookmark<'a> {
                 if len % 4 != 0 {
                     return Err(Error::new(ErrorKind::BadLength, at));
                 }
-                Ok(Value::Array(Array { bm: *self, offsets: data, at, depth }))
+                Ok(Value::Array(Array {
+                    bm: *self,
+                    offsets: data,
+                    at,
+                    depth,
+                }))
             }
             ty::DICT => {
                 if len % 8 != 0 {
                     return Err(Error::new(ErrorKind::BadLength, at));
                 }
-                Ok(Value::Dict(Dict { bm: *self, offsets: data, at, depth }))
+                Ok(Value::Dict(Dict {
+                    bm: *self,
+                    offsets: data,
+                    at,
+                    depth,
+                }))
             }
             ty::UUID => {
                 let bytes: [u8; 16] = data
@@ -283,8 +301,7 @@ impl<'a> Bookmark<'a> {
                     .map_err(|_| Error::new(ErrorKind::InvalidUtf8, payload_at)),
                 url::RELATIVE => {
                     let mut u = Reader::new(data);
-                    let mut word =
-                        || u.u32_le().map_err(|_| Error::new(ErrorKind::BadLength, at));
+                    let mut word = || u.u32_le().map_err(|_| Error::new(ErrorKind::BadLength, at));
                     let base_offset = word()?;
                     let relative_offset = word()?;
                     Ok(Value::RelativeUrl(RelativeUrl {
@@ -376,9 +393,10 @@ impl<'a> Bookmark<'a> {
     /// included, so `/private/tmp/x.txt` arrives as three items.
     pub fn path_components(&self) -> Result<Option<PathComponents<'a>>> {
         match self.get(key::TARGET_PATH)? {
-            Some(Value::Array(a)) => {
-                Ok(Some(PathComponents { inner: a.iter(), at: a.offset() }))
-            }
+            Some(Value::Array(a)) => Ok(Some(PathComponents {
+                inner: a.iter(),
+                at: a.offset(),
+            })),
             Some(_) => Err(Error::new(ErrorKind::Malformed, self.header_size)),
             None => Ok(None),
         }
@@ -386,7 +404,9 @@ impl<'a> Bookmark<'a> {
 
     /// The target's creation date, key `0x1040`.
     pub fn target_creation_date(&self) -> Result<Option<Date>> {
-        Ok(self.get(key::TARGET_CREATION_DATE)?.and_then(|v| v.as_date()))
+        Ok(self
+            .get(key::TARGET_CREATION_DATE)?
+            .and_then(|v| v.as_date()))
     }
 
     /// When the bookmark itself was made, key `0xF030`.
@@ -395,9 +415,11 @@ impl<'a> Bookmark<'a> {
     /// date, so it goes through [`Value::as_f64`], not [`Value::as_date`] — but
     /// the epoch is the same, so it comes back as a [`Date`] all the same.
     pub fn creation_time(&self) -> Result<Option<Date>> {
-        Ok(self
-            .get(key::CREATION_TIME)?
-            .and_then(|v| v.as_f64().map(Date::from_absolute_seconds).or_else(|| v.as_date())))
+        Ok(self.get(key::CREATION_TIME)?.and_then(|v| {
+            v.as_f64()
+                .map(Date::from_absolute_seconds)
+                .or_else(|| v.as_date())
+        }))
     }
 
     /// `CFURL` resource property flags for the target, key `0x1010`.
@@ -426,7 +448,9 @@ impl<'a> Bookmark<'a> {
         if let Some(v) = self.get(key::SANDBOX_RW_EXTENSION)? {
             return Ok(v.as_data());
         }
-        Ok(self.get(key::SANDBOX_RO_EXTENSION)?.and_then(|v| v.as_data()))
+        Ok(self
+            .get(key::SANDBOX_RO_EXTENSION)?
+            .and_then(|v| v.as_data()))
     }
 
     /// Walk every TOC, entry and record, resolving the whole object graph.
