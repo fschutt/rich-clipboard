@@ -30,13 +30,34 @@ pub struct ClipboardItem {
     pub native: String,
     /// The payload, undecoded.
     pub bytes: Vec<u8>,
+    /// Which pasteboard item this is a representation *of*.
+    ///
+    /// macOS pasteboards hold **items**, and each item offers several
+    /// representations of one thing: copying three files in Finder produces
+    /// three items that each offer `public.file-url`, not one item offering
+    /// it three times. Windows and X11/Wayland have no equivalent — one
+    /// selection, many flavors — so this stays `0` there.
+    ///
+    /// It matters because the obvious macOS API gets it wrong:
+    /// `-[NSPasteboard dataForType:]` reaches only the *first* item offering a
+    /// type, so a three-file copy reads back as one file. Recording the index
+    /// is what lets a consumer reassemble the selection instead of silently
+    /// losing most of it.
+    pub item: usize,
 }
 
 impl ClipboardItem {
+    /// A representation of the first (usually only) item.
     pub fn new(native: impl Into<String>, bytes: impl Into<Vec<u8>>) -> Self {
+        Self::in_item(0, native, bytes)
+    }
+
+    /// A representation of item `item`.
+    pub fn in_item(item: usize, native: impl Into<String>, bytes: impl Into<Vec<u8>>) -> Self {
         Self {
             native: native.into(),
             bytes: bytes.into(),
+            item,
         }
     }
 
@@ -82,6 +103,18 @@ impl ClipboardPayload {
         self
     }
 
+    /// Add a representation belonging to item `item`.
+    #[must_use]
+    pub fn with_in(
+        mut self,
+        item: usize,
+        native: impl Into<String>,
+        bytes: impl Into<Vec<u8>>,
+    ) -> Self {
+        self.items.push(ClipboardItem::in_item(item, native, bytes));
+        self
+    }
+
     #[must_use]
     pub fn items(&self) -> &[ClipboardItem] {
         &self.items
@@ -109,6 +142,32 @@ impl ClipboardPayload {
     #[must_use]
     pub fn get(&self, want: Flavor<'_>) -> Option<&ClipboardItem> {
         self.items.iter().find(|i| i.flavor(self.platform) == want)
+    }
+
+    /// How many pasteboard items this payload covers.
+    ///
+    /// One for every platform but macOS, and for most macOS pastes too — it
+    /// is a multi-file or multi-object selection that makes this interesting.
+    #[must_use]
+    pub fn item_count(&self) -> usize {
+        self.items.iter().map(|i| i.item + 1).max().unwrap_or(0)
+    }
+
+    /// Every representation belonging to one item.
+    pub fn group(&self, item: usize) -> impl Iterator<Item = &ClipboardItem> {
+        self.items.iter().filter(move |i| i.item == item)
+    }
+
+    /// Every item offering `want`, in order.
+    ///
+    /// This is what a file list needs: a three-file Finder copy offers
+    /// `public.file-url` three times, once per item, and taking only the first
+    /// is how a multi-file paste turns into a single-file paste.
+    pub fn all<'a>(&'a self, want: Flavor<'a>) -> impl Iterator<Item = &'a ClipboardItem> + 'a {
+        let platform = self.platform;
+        self.items
+            .iter()
+            .filter(move |i| i.flavor(platform) == want)
     }
 
     /// The richest content flavor on offer, by [`Flavor::read_rank`].

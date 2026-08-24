@@ -125,3 +125,79 @@ fn push_and_builder_agree() {
     let b = ClipboardPayload::new(Platform::Unix).with("text/plain", b"x".to_vec());
     assert_eq!(a, b);
 }
+
+/// What a three-file Finder copy actually looks like: three *items*, each
+/// offering the same flavor, rather than one item offering it three times.
+fn finder_three_file_copy() -> ClipboardPayload {
+    ClipboardPayload::new(Platform::MacOs)
+        .with_in(0, "public.file-url", b"file:///tmp/a.txt".to_vec())
+        .with_in(0, "public.utf8-plain-text", b"a.txt".to_vec())
+        .with_in(1, "public.file-url", b"file:///tmp/b.txt".to_vec())
+        .with_in(1, "public.utf8-plain-text", b"b.txt".to_vec())
+        .with_in(2, "public.file-url", b"file:///tmp/c.txt".to_vec())
+}
+
+#[test]
+fn taking_only_the_first_match_loses_a_multi_file_selection() {
+    let p = finder_three_file_copy();
+    // `get` is first-match, which is right for "give me the HTML" and wrong
+    // for a file list. This is the shape of the bug in -[NSPasteboard
+    // dataForType:], which reaches only the first item offering a type.
+    assert_eq!(
+        p.get(Flavor::FileList).map(|i| i.bytes.as_slice()),
+        Some(&b"file:///tmp/a.txt"[..])
+    );
+    // `all` is what a file list needs.
+    let urls: Vec<_> = p
+        .all(Flavor::FileList)
+        .map(|i| i.bytes.as_slice())
+        .collect();
+    assert_eq!(
+        urls,
+        vec![
+            &b"file:///tmp/a.txt"[..],
+            &b"file:///tmp/b.txt"[..],
+            &b"file:///tmp/c.txt"[..]
+        ],
+        "a three-file copy must come back as three files"
+    );
+}
+
+#[test]
+fn items_group_by_index() {
+    let p = finder_three_file_copy();
+    assert_eq!(p.item_count(), 3);
+    assert_eq!(p.group(0).count(), 2, "item 0 offers a URL and a name");
+    assert_eq!(p.group(2).count(), 1, "item 2 offers only a URL");
+    assert_eq!(
+        p.group(9).count(),
+        0,
+        "an item that does not exist is empty, not a panic"
+    );
+    assert_eq!(
+        p.group(1)
+            .find(|i| i.flavor(Platform::MacOs) == Flavor::PlainText)
+            .map(|i| i.bytes.as_slice()),
+        Some(&b"b.txt"[..])
+    );
+}
+
+#[test]
+fn a_single_item_payload_still_reads_as_one_item() {
+    // Every platform but macOS has no notion of items, so the common case must
+    // not have to think about them.
+    let p = browser_copy();
+    assert_eq!(p.item_count(), 1);
+    assert_eq!(p.group(0).count(), 3);
+    assert_eq!(
+        p.items()[0].item,
+        0,
+        "new() puts a representation in item 0"
+    );
+}
+
+#[test]
+fn an_empty_payload_has_no_items() {
+    let p = ClipboardPayload::new(Platform::MacOs);
+    assert_eq!(p.item_count(), 0, "not 1 — there is nothing there");
+}
