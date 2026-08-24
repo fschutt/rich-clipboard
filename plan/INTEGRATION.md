@@ -14,7 +14,7 @@ Clipboard support splits into three layers. **Two of them are done; the first is
 | Layer | What it is | Status |
 |---|---|---|
 | **1. Transport** | `OpenClipboard`/`IDataObject`, `NSPasteboard`, ICCCM selections + INCR, `wl_data_offer` fds, XDND | **Yours.** Partly exists in azul already |
-| **2. Codecs** | `&[u8] → T` and back, for 14 formats | Done. `no_std`, no `unsafe`, 848 tests |
+| **2. Codecs** | `&[u8] → T` and back, for 14 formats | Done and published. `no_std`, no `unsafe`, 854 tests |
 | **3. Policy** | Which flavor to prefer, lossy conversions, size limits | Done, in `rich-clipboard` |
 
 Nothing in this workspace calls an OS API. That is deliberate — it is what makes a Windows `.lnk`
@@ -49,6 +49,10 @@ seam moves, not before.
 [dependencies]
 rich-clipboard = { version = "0.1", features = ["rich-text", "file-list", "dib", "shortcut"] }
 ```
+
+Everything is on crates.io at `0.1` — sixteen crates. You want `rich-clipboard`; the fifteen
+below it (`rclip-core` plus fourteen codecs) are there too, if you ever need one on its own — parsing a
+`.lnk` in a build script, say, without the rest of a clipboard stack.
 
 Every format is a separate feature and all are **off by default** — a consumer that wants text and
 images must not compile the `.lnk` parser. `full` turns on all formats; `image` (an optional
@@ -244,8 +248,19 @@ and inference will not produce the higher-ranked bound on its own.
   back, and `dump-clipboard` writes the sidecars for you. Read
   [`corpus/README.md`](../corpus/README.md) first — it is a public repo and the redaction rules are
   binding. A leak scanner in CI will fail the build if you miss something.
-- **`cargo test --workspace --all-features`** — 848 tests.
+- **`cargo test --workspace --all-features`** — 854 tests.
 - **`fuzz/`** — 31 targets. `fuzz/run-all.sh 120` runs the lot.
+
+## 6b. A note on trusting this document
+
+Everything in §4 was measured on a real machine against real applications, and where a
+specification and reality disagreed the code follows reality and says so in a comment. But only
+**macOS** was measured directly. The Windows, X11 and Wayland notes come from the specifications
+plus the source of real implementations (Wine, GLib, KIO, Nautilus, Chromium), and they have not
+been checked against a running system.
+
+Treat the macOS section as observed and the other three as well-researched but unverified. If one
+of them turns out to be wrong, that is a finding worth writing down rather than a surprise.
 
 ## 7. What is not done
 
