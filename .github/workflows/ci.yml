@@ -36,8 +36,18 @@ jobs:
           set -euo pipefail
           for manifest in crates/*/Cargo.toml; do
             name=$(basename "$(dirname "$manifest")")
-            # The facade is allowed std; codecs are not.
-            if [ "$name" = "rich-clipboard" ]; then continue; fi
+            # Two crates are deliberately not codecs and are allowed std:
+            # the consumer-facing facade, and the corpus test harness, which
+            # walks the filesystem for a living. Everything else must hold
+            # no_std, and the check below makes a codec silently dropping the
+            # attribute a failure rather than an exemption.
+            case "$name" in
+              rich-clipboard|rclip-corpus-tests) continue ;;
+            esac
+            if ! grep -q '#!\[no_std\]' "crates/$name/src/lib.rs"; then
+              echo "::error file=crates/$name/src/lib.rs::$name is not exempt but does not declare no_std"
+              exit 1
+            fi
             echo "::group::$name"
             cargo build -p "$name" --no-default-features --target thumbv7em-none-eabi
             # Also with alloc: thumbv7em is 32-bit, and code behind the alloc
