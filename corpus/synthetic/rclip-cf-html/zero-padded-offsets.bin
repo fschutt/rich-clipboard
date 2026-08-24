@@ -1,0 +1,7 @@
+Version:0.9
+StartHTML:0000000153
+EndHTML:0000000254
+StartFragment:0000000185
+EndFragment:0000000222
+SourceURL:https://example.org/article?q=1#frag
+<html><body><!--StartFragment--><p>Hello, <b>wörld</b> — café</p><!--EndFragment--></body></html>

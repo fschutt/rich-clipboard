@@ -1,0 +1,10 @@
+{
+  "format": "CF_HTML",
+  "origin": "synthetic",
+  "description": "The MSHTML example from the spec, byte for byte",
+  "expect": "ok",
+  "notes": "Copied verbatim from the current Win32 docs. Header is 121 bytes and StartHTML:0121 / EndHTML:0272 are correct, but StartFragment:0006 and EndFragment:0106 are nonsense - the marker comments put the fragment at 147..247. StartSelection:0180 / EndSelection:0225 are correct and land inside the fragment. This is the fixture that proves the comments win over the numbers, and that the disagreement is reported rather than hidden.",
+  "expect_fragment": "<body>This is normal. <b>This is bold.</b> <i><b>This is bold italic.</b> This is italic.</i></body>",
+  "expect_selection": "bold.</b> <i><b>This is bold italic.</b> This",
+  "expect_fragment_source": "CommentsOverrodeOffsets"
+}

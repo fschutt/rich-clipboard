@@ -1,0 +1,11 @@
+{
+  "format": "CF_HTML",
+  "origin": "synthetic",
+  "description": "Version:1.1, an unknown header key, and LF line endings",
+  "expect": "ok",
+  "notes": "The spec says future revisions may extend the header, so an unknown key is a forward-compatible producer and must be skipped rather than rejected. An unrecognised Version must likewise be accepted: refusing to paste because the number went up is a self-inflicted wound.",
+  "expect_fragment": "<h1>Title</h1>",
+  "expect_source_url": "about:blank",
+  "expect_version": "1.1",
+  "expect_fragment_source": "Agreed"
+}

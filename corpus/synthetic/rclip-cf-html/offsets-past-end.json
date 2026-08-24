@@ -1,0 +1,8 @@
+{
+  "format": "CF_HTML",
+  "origin": "synthetic",
+  "description": "EndHTML claims 9999999999 in a 185-byte buffer",
+  "expect": "error",
+  "expect_error_kind": "BadOffset",
+  "notes": "A payload truncated in transit, or a hostile producer. The bytes EndHTML names do not exist, so there is nothing to recover; the parser must return BadOffset carrying the offending offset rather than panic on a slice index."
+}

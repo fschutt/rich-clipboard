@@ -1,0 +1,9 @@
+{
+  "format": "CF_HTML",
+  "origin": "synthetic",
+  "description": "No marker comments at all - the byte offsets are the only evidence",
+  "expect": "ok",
+  "notes": "Some producers omit the comments. Then the numbers are all there is, and a wrong one yields wrong text with nothing to check it against; the parser reports FragmentSource::OffsetsOnly so a caller can tell this payload apart from a corroborated one.",
+  "expect_fragment": "<p>trust the numbers</p>",
+  "expect_fragment_source": "OffsetsOnly"
+}

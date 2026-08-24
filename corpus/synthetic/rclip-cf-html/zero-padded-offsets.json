@@ -1,0 +1,10 @@
+{
+  "format": "CF_HTML",
+  "origin": "synthetic",
+  "description": "Ten-digit zero-padded offsets, all four agreeing with the comments",
+  "expect": "ok",
+  "notes": "The shape every real producer emits: offsets left-padded to ten digits because that is the placeholder width they back-patch into. Body holds multi-byte UTF-8 (o-umlaut, em dash, e-acute) so a parser that counts characters instead of bytes lands mid-codepoint and fails.",
+  "expect_fragment": "<p>Hello, <b>wörld</b> — café</p>",
+  "expect_source_url": "https://example.org/article?q=1#frag",
+  "expect_fragment_source": "Agreed"
+}

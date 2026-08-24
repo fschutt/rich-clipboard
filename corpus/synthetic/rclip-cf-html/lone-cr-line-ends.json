@@ -1,0 +1,9 @@
+{
+  "format": "CF_HTML",
+  "origin": "synthetic",
+  "description": "Header lines terminated by a bare CR",
+  "expect": "ok",
+  "notes": "The spec allows CRLF, LF or a lone CR. str::lines does not split on a lone CR, so any parser built on it reads the whole header as one line and finds no offsets at all.",
+  "expect_fragment": "<em>archaic</em>",
+  "expect_fragment_source": "Agreed"
+}

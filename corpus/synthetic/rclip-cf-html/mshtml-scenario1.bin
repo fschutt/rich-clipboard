@@ -1,0 +1,8 @@
+Version:1.0
+StartHTML:0121
+EndHTML:0272
+StartFragment:0006
+EndFragment:0106
+StartSelection:0180
+EndSelection:0225
+<html><!--StartFragment--><body>This is normal. <b>This is bold.</b> <i><b>This is bold italic.</b> This is italic.</i></body><!--EndFragment--></html>

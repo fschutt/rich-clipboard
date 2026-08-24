@@ -1,0 +1,30 @@
+[package]
+name        = "rclip-cf-html"
+description = "CF_HTML (\"HTML Format\") clipboard payloads: parser and back-patching serializer"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[features]
+default = []
+## Enables `CfHtmlBuilder`, the serializer. Writing CF_HTML means producing a
+## blob, so it cannot borrow.
+alloc = ["rclip-core/alloc"]
+std = ["alloc", "rclip-core/std"]
+
+[dependencies]
+rclip-core = { workspace = true }
+
+# No third-party dependencies. See README.md "Prior art" for the crates that
+# were evaluated and why none of them are here.
+
+# Depending on ourselves as a dev-dependency is how the integration tests get
+# the `alloc` feature without making it a default feature: Cargo unifies the
+# feature set for the test build only, so `cargo test -p rclip-cf-html` exercises
+# the serializer while `cargo build -p rclip-cf-html --no-default-features` still
+# proves the library is `no_std`.
+[dev-dependencies]
+rclip-cf-html = { path = ".", features = ["std"] }

@@ -1,0 +1,10 @@
+{
+  "format": "CF_HTML",
+  "origin": "synthetic",
+  "description": "StartHTML:-1 / EndHTML:-1 - a fragment with no surrounding document",
+  "expect": "ok",
+  "notes": "The spec: 'If the context is not stored, the fragment only is stored and the StartHTML=EndHTML=-1.' A parser that runs the value through an unsigned parse either errors out or, worse, wraps it to a huge offset.",
+  "expect_fragment": "<span style=\"color:#c00\">fragment only</span>",
+  "expect_context": null,
+  "expect_fragment_source": "Agreed"
+}
