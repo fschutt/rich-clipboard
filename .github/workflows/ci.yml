@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --all-features
+
+  no_std:
+    name: no_std holds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # A target with no std at all: if anything in a codec crate reaches
+          # for std, this is where it fails. Building without default features
+          # on a hosted target would not catch it, because std is still there.
+          targets: thumbv7em-none-eabi
+      - uses: Swatinem/rust-cache@v2
+      - name: build every codec crate for a bare-metal target
+        run: |
+          set -euo pipefail
+          for manifest in crates/*/Cargo.toml; do
+            name=$(basename "$(dirname "$manifest")")
+            # The facade is allowed std; codecs are not.
+            if [ "$name" = "rich-clipboard" ]; then continue; fi
+            echo "::group::$name"
+            cargo build -p "$name" --no-default-features --target thumbv7em-none-eabi
+            echo "::endgroup::"
+          done
+
+  lint:
+    name: fmt + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --all-features
+
+  unsafe:
+    name: no unsafe code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: every codec crate must forbid unsafe
+        run: |
+          set -euo pipefail
+          fail=0
+          for lib in crates/*/src/lib.rs; do
+            name=$(basename "$(dirname "$(dirname "$lib")")")
+            if ! grep -q '#!\[forbid(unsafe_code)\]' "$lib"; then
+              echo "::error file=$lib::$name does not forbid unsafe_code"
+              fail=1
+            fi
+          done
+          exit $fail
