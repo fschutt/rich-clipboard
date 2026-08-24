@@ -37,6 +37,8 @@ pub mod limits;
 pub mod payload;
 pub mod reader;
 pub mod shortcut;
+#[cfg(feature = "alloc")]
+pub mod text;
 pub mod utf16;
 
 pub use error::{Error, ErrorKind, Result};
@@ -46,6 +48,8 @@ pub use limits::{Budget, Limits, Oversize, OversizePolicy, SizeHint};
 pub use payload::{ClipboardItem, ClipboardPayload};
 pub use reader::Reader;
 pub use shortcut::ShortcutTarget;
+#[cfg(feature = "alloc")]
+pub use text::{decode_html_bytes, decode_plain, encode_plain};
 pub use utf16::Utf16Le;
 
 /// Depth limit for every recursive parser in the workspace.
