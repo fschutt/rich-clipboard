@@ -35,6 +35,7 @@ pub mod flavor;
 #[cfg(feature = "alloc")]
 pub mod payload;
 pub mod reader;
+pub mod shortcut;
 pub mod utf16;
 
 pub use error::{Error, ErrorKind, Result};
@@ -42,6 +43,7 @@ pub use flavor::{Flavor, Platform, WindowsFormat};
 #[cfg(feature = "alloc")]
 pub use payload::{ClipboardItem, ClipboardPayload};
 pub use reader::Reader;
+pub use shortcut::ShortcutTarget;
 pub use utf16::Utf16Le;
 
 /// Depth limit for every recursive parser in the workspace.

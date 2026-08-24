@@ -97,3 +97,71 @@ fn legacy_pasteboard_twins_resolve_the_same_as_their_modern_uti() {
         );
     }
 }
+
+#[test]
+fn the_ostype_wrapper_is_decoded_not_treated_as_opaque() {
+    // corpus/macos/safari/ contains this exact identifier. The hex is four
+    // ASCII bytes: 0x75743136 spells "ut16".
+    assert_eq!(
+        Flavor::from_uti("CorePasteboardFlavorType 0x75743136"),
+        Flavor::PlainTextUtf16
+    );
+    assert_eq!(
+        Flavor::from_uti("CorePasteboardFlavorType 0x54455854"), // "TEXT"
+        Flavor::PlainText
+    );
+    assert_eq!(
+        Flavor::from_uti("CorePasteboardFlavorType 0x504E4766"), // "PNGf"
+        Flavor::Png
+    );
+}
+
+#[test]
+fn a_malformed_ostype_wrapper_stays_opaque_rather_than_guessing() {
+    for bad in [
+        "CorePasteboardFlavorType 0x7574313",   // 7 digits
+        "CorePasteboardFlavorType 0x757431366", // 9 digits
+        "CorePasteboardFlavorType 0xZZZZZZZZ",  // not hex
+        "CorePasteboardFlavorType 0x00000000",  // valid hex, unknown code
+        "CorePasteboardFlavorType",             // no hex at all
+    ] {
+        assert_eq!(
+            Flavor::from_uti(bad),
+            Flavor::Other(bad),
+            "{bad} must round-trip verbatim rather than resolve to something wrong"
+        );
+    }
+}
+
+#[test]
+fn utf16_text_is_not_the_same_flavor_as_utf8_text() {
+    // A real pasteboard offers both side by side. Collapsing them means
+    // handing UTF-16LE bytes to a UTF-8 decoder, which yields mojibake rather
+    // than an error.
+    assert_eq!(
+        Flavor::from_uti("public.utf8-plain-text"),
+        Flavor::PlainText
+    );
+    assert_eq!(
+        Flavor::from_uti("public.utf16-external-plain-text"),
+        Flavor::PlainTextUtf16
+    );
+    assert_ne!(Flavor::PlainText, Flavor::PlainTextUtf16);
+    assert!(
+        Flavor::PlainText.read_rank() < Flavor::PlainTextUtf16.read_rank(),
+        "prefer the UTF-8 form when both are offered"
+    );
+}
+
+#[test]
+fn the_web_archive_outranks_the_markup_it_wraps() {
+    assert_eq!(Flavor::from_uti("com.apple.webarchive"), Flavor::WebArchive);
+    assert_eq!(
+        Flavor::from_uti("Apple Web Archive pasteboard type"),
+        Flavor::WebArchive
+    );
+    assert!(
+        Flavor::WebArchive.read_rank() < Flavor::Html.read_rank(),
+        "a web archive carries the HTML plus its subresources"
+    );
+}

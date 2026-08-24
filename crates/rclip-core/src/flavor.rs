@@ -110,14 +110,43 @@ impl Platform {
     }
 }
 
+/// One hex digit, or `None`.
+const fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
 /// What is on the clipboard, abstractly.
 ///
 /// Borrowed rather than owning so the whole registry works without `alloc`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum Flavor<'a> {
-    /// UTF-8 plain text.
+    /// Plain text in the platform's canonical encoding.
+    ///
+    /// Note that this is *not* always UTF-8: on Windows the carrier is
+    /// `CF_UNICODETEXT`, which is UTF-16LE. The platform tells you which,
+    /// and a decoder that assumes UTF-8 everywhere produces garbage on
+    /// Windows rather than an error.
     PlainText,
+    /// macOS `public.utf16-external-plain-text` — UTF-16LE with a BOM.
+    ///
+    /// A separate flavor rather than a spelling of [`Flavor::PlainText`],
+    /// because a real pasteboard offers both side by side and handing these
+    /// bytes to a UTF-8 decoder yields mojibake, not a failure. Despite
+    /// "external", captures show little-endian with an `FF FE` BOM, not
+    /// network byte order.
+    PlainTextUtf16,
+    /// A Safari web archive: a plist bundling HTML with its subresources.
+    ///
+    /// The richest thing Safari puts on a pasteboard. No codec decodes it
+    /// yet, but naming it means a consumer can recognise and pass it on
+    /// rather than seeing an opaque [`Flavor::Other`].
+    WebArchive,
     /// An HTML fragment. On Windows this is `CF_HTML` and needs its header
     /// stripped; elsewhere it is bare markup.
     Html,
@@ -201,7 +230,11 @@ impl<'a> Flavor<'a> {
             Self::FileContents => Registered(cfstr::FILECONTENTS),
             Self::Url => Registered(cfstr::INETURL),
             Self::DropEffect => Registered(cfstr::PREFERREDDROPEFFECT),
-            Self::UrlName | Self::ShellLink | Self::Other(_) => return None,
+            Self::PlainTextUtf16
+            | Self::WebArchive
+            | Self::UrlName
+            | Self::ShellLink
+            | Self::Other(_) => return None,
         })
     }
 
@@ -210,6 +243,8 @@ impl<'a> Flavor<'a> {
     pub const fn uti(&self) -> Option<&'static str> {
         Some(match self {
             Self::PlainText => "public.utf8-plain-text",
+            Self::PlainTextUtf16 => "public.utf16-external-plain-text",
+            Self::WebArchive => "com.apple.webarchive",
             Self::Html => "public.html",
             Self::Rtf => "public.rtf",
             Self::Png => "public.png",
@@ -247,7 +282,9 @@ impl<'a> Flavor<'a> {
             Self::Dib | Self::DibV5 => "image/bmp",
             Self::FileList => "text/uri-list",
             Self::Url => "text/uri-list",
-            Self::ShellIdList
+            Self::PlainTextUtf16
+            | Self::WebArchive
+            | Self::ShellIdList
             | Self::FileDescriptor
             | Self::FileContents
             | Self::UrlName
@@ -303,6 +340,8 @@ impl<'a> Flavor<'a> {
             "public.utf8-plain-text" | "public.plain-text" | "NSStringPboardType" => {
                 Self::PlainText
             }
+            "public.utf16-external-plain-text" | "NSUnicodePboardType" => Self::PlainTextUtf16,
+            "com.apple.webarchive" | "Apple Web Archive pasteboard type" => Self::WebArchive,
             "public.html" | "Apple HTML pasteboard type" => Self::Html,
             "public.rtf" | "NeXT Rich Text Format v1.0 pasteboard type" => Self::Rtf,
             // Every modern UTI has a legacy twin on a real pasteboard, carrying
@@ -316,6 +355,48 @@ impl<'a> Flavor<'a> {
             "public.file-url" | "NSFilenamesPboardType" => Self::FileList,
             "public.url" | "Apple URL pasteboard type" => Self::Url,
             "public.url-name" => Self::UrlName,
+            other => return Self::from_core_pasteboard_type(other),
+        }
+    }
+
+    /// Decode a `CorePasteboardFlavorType 0xNNNNNNNN` identifier.
+    ///
+    /// When a pasteboard type predates UTIs and has no registered mapping,
+    /// macOS renders it as this wrapper around the classic four-character
+    /// OSType. The hex is the four ASCII bytes: `0x75743136` is `ut16`.
+    /// Decoding it recovers real flavors that would otherwise read as opaque —
+    /// `corpus/macos/safari/` contains exactly that one.
+    fn from_core_pasteboard_type(s: &'a str) -> Self {
+        const PREFIX: &str = "CorePasteboardFlavorType 0x";
+        let Some(hex) = s.strip_prefix(PREFIX) else {
+            return Self::Other(s);
+        };
+        if hex.len() != 8 {
+            return Self::Other(s);
+        }
+        let mut code = [0u8; 4];
+        let bytes = hex.as_bytes();
+        let mut i = 0;
+        while i < 4 {
+            let (hi, lo) = (hex_val(bytes[i * 2]), hex_val(bytes[i * 2 + 1]));
+            let (Some(hi), Some(lo)) = (hi, lo) else {
+                return Self::Other(s);
+            };
+            code[i] = (hi << 4) | lo;
+            i += 1;
+        }
+        match &code {
+            b"TEXT" | b"utf8" => Self::PlainText,
+            b"ut16" | b"utxt" => Self::PlainTextUtf16,
+            b"RTF " | b"rtf " => Self::Rtf,
+            b"HTML" => Self::Html,
+            b"PNGf" => Self::Png,
+            b"TIFF" => Self::Tiff,
+            b"JPEG" => Self::Jpeg,
+            b"GIFf" => Self::Gif,
+            b"furl" => Self::FileList,
+            b"url " => Self::Url,
+            b"urln" => Self::UrlName,
             _ => Self::Other(s),
         }
     }
@@ -394,6 +475,7 @@ impl<'a> Flavor<'a> {
             Self::ShellIdList => 1,
             Self::FileList => 2,
             Self::FileDescriptor => 3,
+            Self::WebArchive => 3,
             Self::Rtf => 4,
             Self::Html => 5,
             Self::Png => 6,
@@ -404,7 +486,8 @@ impl<'a> Flavor<'a> {
             Self::Gif => 11,
             Self::Url => 12,
             Self::PlainText => 13,
-            Self::UrlName | Self::FileContents | Self::DropEffect => 14,
+            Self::PlainTextUtf16 => 14,
+            Self::UrlName | Self::FileContents | Self::DropEffect => 15,
             Self::Other(_) => 255,
         }
     }
