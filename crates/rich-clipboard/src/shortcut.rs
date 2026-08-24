@@ -2,15 +2,19 @@
 //!
 //! Windows `.url`, macOS `.webloc` / `.inetloc`, macOS `BookmarkData` and
 //! freedesktop `.desktop` (`Type=Link`) are four spellings of one idea: a file
-//! that points somewhere. `plan/PLAN.md` §4.10 wants them behind a single type,
-//! and each of the four codec crates carries a byte-identical borrowed
-//! `ShortcutTarget` with a `// TODO(phase-4): hoist this into rclip-core`
-//! against it — the crates cannot share the type because codec crates in this
-//! workspace do not depend on each other.
+//! that points somewhere, and `plan/PLAN.md` §4.10 puts them behind a single
+//! type. That type is [`rclip_core::ShortcutTarget`], which every codec crate
+//! in the family re-exports; until Phase 4 hoisted it, four of them carried a
+//! byte-identical copy and a consumer holding two of them held two
+//! incompatible types for one concept.
 //!
-//! [`LinkTarget`] is the owned, consumer-facing version of that type, and this
-//! module is where the four parsers meet. When the phase-4 hoist happens, this
-//! becomes a conversion rather than a redefinition.
+//! [`LinkTarget`] is the **owned** counterpart, for the same reason every other
+//! type in this crate is owned: a `ShortcutTarget<'a>` borrows from the blob it
+//! was parsed out of, and a [`Link`] outlives that blob. It is a conversion of
+//! the shared type and not a second definition of it — [`LinkTarget::classify`]
+//! *is* [`ShortcutTarget::classify`] with the result copied out, the two
+//! agree variant for variant, and [`LinkTarget::as_target`] and the
+//! [`From`] impl move between them.
 //!
 //! # Nothing here resolves anything
 //!
@@ -22,10 +26,13 @@
 
 use alloc::string::String;
 
-/// Where a shortcut points.
+use rclip_core::ShortcutTarget;
+
+/// Where a shortcut points, owned.
 ///
-/// The owned mirror of the borrowed `ShortcutTarget` that `rclip-url-file`,
-/// `rclip-uri-list` and `rclip-desktop-entry` each define.
+/// The owned counterpart of [`ShortcutTarget`], which the codec crates return
+/// borrowed from the blob they parsed. Variant for variant the same type; the
+/// classification is not reimplemented here, it is delegated.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum LinkTarget {
@@ -48,59 +55,51 @@ impl LinkTarget {
         }
     }
 
+    /// Borrow this as the shared [`ShortcutTarget`].
+    ///
+    /// Free: same variant, same characters. This is the direction that lets a
+    /// consumer holding a [`Link`] hand it to anything in the family that
+    /// speaks the borrowed type.
+    #[must_use]
+    pub fn as_target(&self) -> ShortcutTarget<'_> {
+        match self {
+            Self::Url(s) => ShortcutTarget::Url(s),
+            Self::Path(s) => ShortcutTarget::Path(s),
+            Self::Unresolved(s) => ShortcutTarget::Unresolved(s),
+        }
+    }
+
     /// Classify a raw destination string.
     ///
-    /// The order of the tests is the whole trick, and it is the reason this is
-    /// not a `contains(':')`: `C:\Users\me` is a syntactically valid RFC 3986
-    /// URI reference with the scheme `C`, so a naive check turns every Windows
-    /// path on the clipboard into a URL. The path shapes are ruled out first
-    /// and only what survives is offered to the scheme parser.
+    /// Delegates to [`ShortcutTarget::classify`] and copies the result out, so
+    /// that the owned type and the borrowed one cannot drift. The order of the
+    /// tests there is the whole trick, and it is the reason this is not a
+    /// `contains(':')`: `C:\Users\me` is a syntactically valid RFC 3986 URI
+    /// reference with the scheme `C`, so a naive check turns every Windows path
+    /// on the clipboard into a URL.
     #[must_use]
     pub fn classify(s: &str) -> Self {
-        let owned = String::from(s);
-        if s.is_empty() {
-            return Self::Unresolved(owned);
-        }
-        if looks_like_path(s) {
-            return Self::Path(owned);
-        }
-        if scheme(s).is_some() {
-            return Self::Url(owned);
-        }
-        Self::Unresolved(owned)
+        ShortcutTarget::classify(s).into()
     }
 }
 
-/// `true` for the path shapes that would otherwise be misread as URI schemes.
-#[must_use]
-pub(crate) fn looks_like_path(s: &str) -> bool {
-    let b = s.as_bytes();
-    match b {
-        // POSIX absolute path.
-        [b'/', ..] => true,
-        // UNC (`\\server\share`) and the extended-length prefix (`\\?\C:\…`).
-        [b'\\', b'\\', ..] => true,
-        // `X:\` or `X:/` — a DOS drive letter, not a URI scheme.
-        [d, b':', b'\\' | b'/', ..] => d.is_ascii_alphabetic(),
-        _ => false,
+impl From<ShortcutTarget<'_>> for LinkTarget {
+    /// Take ownership of a borrowed target.
+    ///
+    /// Total in both directions with [`LinkTarget::as_target`]: nothing is
+    /// reclassified on the way through, so a `Path` that a codec crate decided
+    /// on stays a `Path` even if this crate's rules were ever to differ.
+    fn from(t: ShortcutTarget<'_>) -> Self {
+        match t {
+            ShortcutTarget::Url(s) => Self::Url(String::from(s)),
+            ShortcutTarget::Path(s) => Self::Path(String::from(s)),
+            ShortcutTarget::Unresolved(s) => Self::Unresolved(String::from(s)),
+            // `ShortcutTarget` is `#[non_exhaustive]`. A variant added later
+            // means a destination shape this crate has no owned spelling for,
+            // and the text is still the honest answer to "where does it point".
+            other => Self::Unresolved(String::from(other.as_str())),
+        }
     }
-}
-
-/// The RFC 3986 §3.1 scheme of `s`, if it has one.
-///
-/// `scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )`. Callers must rule out
-/// DOS paths first; see [`LinkTarget::classify`].
-#[must_use]
-pub(crate) fn scheme(s: &str) -> Option<&str> {
-    let colon = s.find(':')?;
-    let head = s.get(..colon)?;
-    let mut chars = head.chars();
-    if !chars.next()?.is_ascii_alphabetic() {
-        return None;
-    }
-    chars
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
-        .then_some(head)
 }
 
 /// Something that points somewhere, with the title that came with it.

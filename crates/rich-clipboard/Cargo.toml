@@ -26,6 +26,7 @@ alloc = [
     "rclip-dib?/alloc",
     "rclip-dropfiles?/alloc",
     "rclip-file-desc?/alloc",
+    "rclip-html?/alloc",
     "rclip-idlist?/alloc",
     "rclip-rtf?/alloc",
     "rclip-shell-link?/alloc",
@@ -44,6 +45,7 @@ std = [
     "rclip-dib?/std",
     "rclip-dropfiles?/std",
     "rclip-file-desc?/std",
+    "rclip-html?/std",
     "rclip-idlist?/std",
     "rclip-rtf?/std",
     "rclip-shell-link?/std",
@@ -52,8 +54,10 @@ std = [
     "rclip-webloc?/std",
 ]
 
-## `CF_HTML` / `public.html` / `text/html`.
-html = ["dep:rclip-cf-html"]
+## `CF_HTML` / `public.html` / `text/html`, both ways: the `CF_HTML` wrapper
+## and the markup inside it. Two crates because they are two jobs — one reads
+## the Windows header and offsets, the other tokenizes the fragment.
+html = ["dep:rclip-cf-html", "dep:rclip-html"]
 ## Rich Text Format — the read leg of the `RichText` hub on macOS.
 rtf = ["dep:rclip-rtf"]
 ## `CF_DIB` / `CF_DIBV5` raster images.
@@ -103,6 +107,7 @@ rclip-desktop-entry = { workspace = true, optional = true }
 rclip-dib           = { workspace = true, optional = true }
 rclip-dropfiles     = { workspace = true, optional = true }
 rclip-file-desc     = { workspace = true, optional = true }
+rclip-html          = { workspace = true, optional = true }
 rclip-idlist        = { workspace = true, optional = true }
 rclip-rtf           = { workspace = true, optional = true }
 rclip-shell-link    = { workspace = true, optional = true }

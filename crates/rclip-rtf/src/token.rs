@@ -133,7 +133,17 @@ impl<'a> Tokenizer<'a> {
         };
 
         if c.is_ascii_alphabetic() {
-            return Some(self.control_word(rest));
+            // Through `fail`, not straight out: `control_word` has four `?`
+            // paths of its own (`\binN` past the end, a non-UTF-8 name, and the
+            // two `skip`s), and returning one of those without setting `done`
+            // left the iterator alive after a terminal error. It would then
+            // carry on lexing bytes that had just been *declared to be binary*
+            // as if they were markup — the confident nonsense this type's docs
+            // promise it does not produce.
+            return match self.control_word(rest) {
+                Ok(token) => Some(Ok(token)),
+                Err(e) => self.fail(e.kind, e.offset),
+            };
         }
 
         let at = self.r.pos();

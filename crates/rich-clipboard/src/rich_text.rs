@@ -27,19 +27,26 @@
 //! format that has less would have to invent the difference. Losing structure
 //! at a documented boundary beats fabricating it at an undocumented one.
 //!
-//! # The missing leg
+//! # Both legs
 //!
-//! `RichText` converts **to** HTML and **both ways** with RTF. It does not
-//! convert *from* HTML: that needs an HTML tokenizer, `rclip-cf-html` states
-//! outright that it does not parse markup, and nothing else in the workspace
-//! does either. Decoding an HTML flavor therefore yields
-//! [`RichItem::Html`](crate::RichItem::Html) — the markup, intact — rather than
-//! a `RichText`. `// TODO(phase-2):` an `rclip-html` tokenizer closes this.
+//! `RichText` converts both ways with RTF (through `rclip-rtf`) and both ways
+//! with HTML (through `rclip-html`), so decoding an HTML flavor produces styled
+//! runs rather than markup. It did not until phase 2: `rclip-cf-html` reads the
+//! Windows header and states outright that it does not parse markup, and until
+//! `rclip-html` existed there was nothing in the workspace that did.
 //!
-//! It is less of a hole than it looks, because it is exactly why
-//! [`Flavor::read_rank`](rclip_core::Flavor::read_rank) puts RTF above HTML:
-//! when a source offers both — which Word, Outlook and LibreOffice all do — the
-//! read side takes the one that becomes structure.
+//! What HTML still loses on the way in is the cascade — a fragment that styles
+//! its text through a class rather than through a `style=` attribute arrives
+//! unstyled — plus links, images, and lists and tables as structure. That is
+//! why [`Flavor::read_rank`](rclip_core::Flavor::read_rank) still puts RTF
+//! above HTML: when a source offers both, which Word, Outlook and LibreOffice
+//! all do, the read side takes the one that needs no stylesheet.
+//!
+//! A caller that wants the markup itself rather than the styling can still have
+//! it — [`Options::keep_html_markup`](crate::Options::keep_html_markup) turns
+//! the decode back into a [`RichItem::Html`](crate::RichItem::Html), which is
+//! what a clipboard bridge or an inspector wants and what carries `SourceURL`
+//! and the surrounding context document.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -296,217 +303,32 @@ mod rtf_conv {
         /// as a different character rather than as a visible gap.
         #[must_use]
         pub fn to_rtf(&self) -> Vec<u8> {
-            super::rtf_write::write(self)
+            let mut w = rclip_rtf::Writer::new();
+            for (text, style) in self.spans() {
+                w.push(
+                    text,
+                    &rclip_rtf::WriteProps {
+                        bold: style.bold,
+                        italic: style.italic,
+                        underline: style.underline,
+                        strike: style.strikethrough,
+                        size_half_points: style.size_pt.map(rclip_rtf::half_points),
+                        font: style.font_family.as_deref(),
+                        foreground: style.color.map(from_rgb),
+                        background: style.background.map(from_rgb),
+                    },
+                );
+            }
+            w.finish()
         }
     }
 
     fn to_rgb(c: rclip_rtf::Color) -> Rgb {
         Rgb::new(c.red, c.green, c.blue)
     }
-}
 
-// The RTF *writer* lives here rather than in `rclip-rtf` because that crate
-// does not have one yet: its `lib.rs` carries `// TODO(phase-2): the writer`.
-// The facade needs one — on macOS `public.rtf` is the only rich flavor most
-// applications read, so a fan-out that cannot produce RTF cannot publish styled
-// text there at all.
-//
-// TODO(phase-2): delete this module and call `rclip_rtf`'s writer once it
-// exists. Everything below is deliberately written to the same rules that
-// crate's README states for the writer it is going to grow, so the swap is a
-// deletion rather than a behaviour change.
-#[cfg(feature = "rtf")]
-mod rtf_write {
-    use alloc::vec::Vec;
-
-    use super::{Rgb, RichText, Style};
-
-    /// Half-points. `\fs24` is 12pt, and is the RTF default.
-    ///
-    /// The `+ 0.5` is a rounding step done by hand: `f32::round` lives in
-    /// `std`, and this crate keeps the `no_std + alloc` door open because azul
-    /// targets wasm. A cast truncates toward zero, so for a positive value the
-    /// two are the same thing.
-    fn half_points(pt: f32) -> u16 {
-        let hp = pt * 2.0 + 0.5;
-        if hp.is_finite() && hp >= 1.0 && hp < f32::from(u16::MAX) {
-            hp as u16
-        } else {
-            // Not a size we can write. The RTF default, which is 12pt.
-            24
-        }
-    }
-
-    pub(super) fn write(text: &RichText) -> Vec<u8> {
-        // Collect the tables first: RTF wants them in the header, before any
-        // body text, and a run refers to them by index.
-        let mut fonts: Vec<&str> = Vec::new();
-        // Index 0 of `\colortbl` is conventionally the omitted "auto" entry,
-        // which is what `\cf0` means. Real colours start at 1.
-        let mut colors: Vec<Rgb> = Vec::new();
-        for run in &text.runs {
-            if let Some(name) = run.style.font_family.as_deref() {
-                if !fonts.contains(&name) {
-                    fonts.push(name);
-                }
-            }
-            for c in [run.style.color, run.style.background]
-                .into_iter()
-                .flatten()
-            {
-                if !colors.contains(&c) {
-                    colors.push(c);
-                }
-            }
-        }
-
-        let mut out = Vec::new();
-        out.extend_from_slice(br"{\rtf1\ansi\ansicpg1252\uc1\deff0");
-
-        out.extend_from_slice(br"{\fonttbl");
-        // `\f0` always exists so `\deff0` resolves — a reader that cannot find
-        // `\deffN` in the table is entitled to do anything at all — and its
-        // name is deliberately *empty*: it stands for "whatever the reader uses
-        // for body text", which is what `Style::font_family: None` means.
-        // Naming a real font here would invent a statement the caller never
-        // made, and it would come back as one on the next parse.
-        out.extend_from_slice(br"{\f0\fnil ;}");
-        for (i, name) in fonts.iter().enumerate() {
-            out.extend_from_slice(br"{\f");
-            push_num(&mut out, i + 1);
-            out.extend_from_slice(br"\fnil ");
-            escape_into(&mut out, name);
-            out.extend_from_slice(b";}");
-        }
-        out.push(b'}');
-
-        if !colors.is_empty() {
-            // The leading `;` is the auto entry. Dropping it shifts every index
-            // by one and recolours the whole document.
-            out.extend_from_slice(br"{\colortbl;");
-            for c in &colors {
-                out.extend_from_slice(br"\red");
-                push_num(&mut out, usize::from(c.r));
-                out.extend_from_slice(br"\green");
-                push_num(&mut out, usize::from(c.g));
-                out.extend_from_slice(br"\blue");
-                push_num(&mut out, usize::from(c.b));
-                out.push(b';');
-            }
-            out.push(b'}');
-        }
-
-        out.extend_from_slice(b"\n");
-
-        for run in &text.runs {
-            // `\plain` resets every character property, so each run states its
-            // own formatting in full and nothing leaks across a boundary.
-            out.extend_from_slice(br"\plain");
-            emit_props(&mut out, &run.style, &fonts, &colors);
-            out.push(b' ');
-            escape_into(&mut out, text.run_text(run));
-        }
-
-        out.push(b'}');
-        out
-    }
-
-    fn emit_props(out: &mut Vec<u8>, style: &Style, fonts: &[&str], colors: &[Rgb]) {
-        if let Some(name) = style.font_family.as_deref() {
-            if let Some(i) = fonts.iter().position(|f| *f == name) {
-                out.extend_from_slice(br"\f");
-                push_num(out, i + 1);
-            }
-        }
-        out.extend_from_slice(br"\fs");
-        push_num(out, usize::from(half_points(style.size_pt.unwrap_or(12.0))));
-        if style.bold {
-            out.extend_from_slice(br"\b");
-        }
-        if style.italic {
-            out.extend_from_slice(br"\i");
-        }
-        if style.underline {
-            out.extend_from_slice(br"\ul");
-        }
-        if style.strikethrough {
-            out.extend_from_slice(br"\strike");
-        }
-        if let Some(i) = style
-            .color
-            .and_then(|c| colors.iter().position(|k| *k == c))
-        {
-            out.extend_from_slice(br"\cf");
-            push_num(out, i + 1);
-        }
-        if let Some(i) = style
-            .background
-            .and_then(|c| colors.iter().position(|k| *k == c))
-        {
-            // `\highlight` rather than `\cb`: Word writes `\cb` and reads
-            // `\highlight`, and `rclip-rtf` accepts either.
-            out.extend_from_slice(br"\highlight");
-            push_num(out, i + 1);
-        }
-    }
-
-    fn push_num(out: &mut Vec<u8>, n: usize) {
-        let mut buf = [0u8; 20];
-        let mut i = buf.len();
-        let mut n = n;
-        loop {
-            i -= 1;
-            buf[i] = b'0' + (n % 10) as u8;
-            n /= 10;
-            if n == 0 {
-                break;
-            }
-        }
-        out.extend_from_slice(&buf[i..]);
-    }
-
-    /// Escape text into the body of an RTF document.
-    ///
-    /// The three metacharacters are escaped, `\n` and `\t` become control
-    /// words, and everything outside ASCII becomes `\uN?`. The trailing `?` is
-    /// the one-character ANSI fallback that `\uc1` in the header promises; a
-    /// reader that honours the skip count drops it, and one that does not shows
-    /// a question mark instead of mojibake.
-    fn escape_into(out: &mut Vec<u8>, s: &str) {
-        for ch in s.chars() {
-            match ch {
-                '\\' => out.extend_from_slice(br"\\"),
-                '{' => out.extend_from_slice(br"\{"),
-                '}' => out.extend_from_slice(br"\}"),
-                // A paragraph break. `\line` would be a soft break inside one;
-                // `RichText` does not distinguish, and `\par` is what a
-                // receiver turns back into a newline.
-                '\n' => out.extend_from_slice(br"\par "),
-                '\t' => out.extend_from_slice(br"\tab "),
-                // Dropped rather than escaped: `rclip-rtf` treats a bare CR as
-                // a stream artefact, so writing one would round-trip to
-                // nothing anyway.
-                '\r' => {}
-                c if c.is_ascii_graphic() || c == ' ' => out.push(c as u8),
-                c => {
-                    let mut buf = [0u16; 2];
-                    for unit in c.encode_utf16(&mut buf) {
-                        // `\uN`'s parameter is a signed 16-bit value, so
-                        // anything above 32767 — every surrogate, among other
-                        // things — is written as its negative wraparound.
-                        out.extend_from_slice(br"\u");
-                        let signed = i32::from(*unit as i16);
-                        if signed < 0 {
-                            out.push(b'-');
-                            push_num(out, signed.unsigned_abs() as usize);
-                        } else {
-                            push_num(out, signed as usize);
-                        }
-                        out.push(b'?');
-                    }
-                }
-            }
-        }
+    fn from_rgb(c: Rgb) -> rclip_rtf::Color {
+        rclip_rtf::Color::new(c.r, c.g, c.b)
     }
 }
 
@@ -519,9 +341,64 @@ mod html_conv {
     use alloc::string::String;
     use core::fmt::Write as _;
 
-    use super::{RichText, Style};
+    use super::{Rgb, RichText, Style};
 
     impl RichText {
+        /// Decode an HTML fragment into styled runs.
+        ///
+        /// # What is lost
+        ///
+        /// Everything under "what it cannot represent" in the module docs, plus
+        /// what `rclip-html` itself does not do: `<style>` rules and the
+        /// cascade, so text styled through a class rather than through a
+        /// `style=` attribute arrives unstyled; hyperlinks; images; lists and
+        /// tables as structure. Block boundaries become `\n` and table cell
+        /// boundaries `\t`, so nothing runs together.
+        ///
+        /// Browsers inline the styles onto the elements when they put a
+        /// fragment on the clipboard, which is exactly why the missing cascade
+        /// is a floor and not a hole.
+        ///
+        /// # Errors
+        ///
+        /// [`rclip_core::Error`] with [`ErrorKind::DepthLimit`] and nothing
+        /// else. Mismatched nesting, unterminated attributes, stray `<` and
+        /// invalid UTF-8 are all absorbed: in clipboard HTML they are the
+        /// normal case rather than the exception.
+        ///
+        /// [`ErrorKind::DepthLimit`]: rclip_core::ErrorKind::DepthLimit
+        pub fn from_html(markup: &str) -> rclip_core::Result<Self> {
+            Self::from_html_bytes(markup.as_bytes())
+        }
+
+        /// Decode an HTML fragment that is already bytes.
+        ///
+        /// The bytes must be UTF-8. A `text/html` payload off a real clipboard
+        /// might not be — see [`crate::decode`], which sniffs the encoding
+        /// first and then comes here.
+        ///
+        /// # Errors
+        ///
+        /// As [`RichText::from_html`].
+        pub fn from_html_bytes(markup: &[u8]) -> rclip_core::Result<Self> {
+            let doc = rclip_html::Document::parse(markup)?;
+            let mut out = Self::default();
+            for run in &doc.runs {
+                let style = Style {
+                    bold: run.style.bold,
+                    italic: run.style.italic,
+                    underline: run.style.underline,
+                    strikethrough: run.style.strike,
+                    size_pt: run.style.size_pt,
+                    font_family: run.style.font_family.clone(),
+                    color: run.style.color.map(to_rgb),
+                    background: run.style.background.map(to_rgb),
+                };
+                out.push(doc.run_text(run), style);
+            }
+            Ok(out)
+        }
+
         /// Render as an HTML fragment.
         ///
         /// One `<span>` per styled run, with the formatting as inline CSS, and
@@ -576,6 +453,10 @@ mod html_conv {
             }
             builder.build()
         }
+    }
+
+    fn to_rgb(c: rclip_html::Color) -> Rgb {
+        Rgb::new(c.r, c.g, c.b)
     }
 
     fn escape_into(out: &mut String, s: &str) {

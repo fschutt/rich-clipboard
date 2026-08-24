@@ -20,10 +20,13 @@ pub enum RichItem {
     RichText(RichText),
     /// An HTML fragment, still markup.
     ///
-    /// Not a [`RichText`], because turning markup into styled runs needs an
-    /// HTML tokenizer and there is not one in this workspace yet — see the
-    /// [`rich_text`](crate::rich_text) module docs. The markup is handed over
-    /// intact rather than tag-stripped into a plausible-looking lie.
+    /// Not what an HTML flavor decodes to by default any more — that is
+    /// [`RichItem::RichText`], since `rclip-html` closed the last leg of the
+    /// hub. This is what
+    /// [`Options::keep_html_markup`](crate::Options::keep_html_markup) asks
+    /// for, and what a clipboard bridge or an inspector wants: the markup
+    /// intact, with the `SourceURL` and the surrounding context document that
+    /// styled runs have nowhere to put.
     Html(HtmlFragment),
     /// A raster image.
     Image(Image),
@@ -87,6 +90,10 @@ impl RichItem {
         match self {
             Self::Text(s) => Some(s),
             Self::RichText(t) => Some(t.as_str()),
+            // Filled in from the markup by `decode`, or from a sibling
+            // plain-text flavor by `decode_payload`. Still `None` for a
+            // fragment a caller built by hand and did not fill in, because
+            // `plain_text` does not parse and the parse can fail.
             Self::Html(h) => h.plain.as_deref(),
             Self::Link(link) => Some(link.target.as_str()),
             Self::Image(_)
@@ -114,10 +121,31 @@ pub struct HtmlFragment {
     pub source_url: Option<String>,
     /// A plain-text rendering, if one was available.
     ///
-    /// Filled in by [`decode_payload`](crate::decode_payload) from a sibling
-    /// plain-text flavor, and settable by a caller that is about to publish.
-    /// Never derived from `markup`: see [`RichItem::plain_text`].
+    /// Filled in by [`decode`](crate::decode) from the markup itself — there is
+    /// an HTML tokenizer in the workspace now — or by
+    /// [`decode_payload`](crate::decode_payload) from a sibling plain-text
+    /// flavor, which is the better source when there is one because it is what
+    /// the producer itself chose to say.
     pub plain: Option<String>,
+}
+
+#[cfg(feature = "html")]
+impl HtmlFragment {
+    /// Tokenize the markup into styled runs.
+    ///
+    /// # What is lost
+    ///
+    /// See [`RichText::from_html`](crate::RichText::from_html): the cascade,
+    /// links, images, and lists and tables as structure. `context` and
+    /// `source_url` are not part of the result either — they describe the
+    /// markup, and there is no markup left.
+    ///
+    /// # Errors
+    ///
+    /// [`rclip_core::Error`] with `DepthLimit` and nothing else.
+    pub fn to_rich_text(&self) -> rclip_core::Result<RichText> {
+        RichText::from_html(&self.markup)
+    }
 }
 
 /// A raster image.

@@ -115,12 +115,21 @@ a real ceiling, not a phase-1 shortcut: a hub that could represent everything wo
 document model, and every conversion into it from a format that has less would have to invent
 the difference.
 
-**The missing leg is HTML → `RichText`.** It converts *to* HTML and *both ways* with RTF.
-Turning markup into runs needs an HTML tokenizer; `rclip-cf-html` states outright that it does
-not parse HTML, and nothing else in the workspace does either. So decoding an HTML flavor yields
-`RichItem::Html` — the markup, intact — rather than a tag-stripped approximation. It is less of
-a hole than it looks: it is exactly why `read_rank` puts RTF above HTML, so when a source offers
-both (Word, Outlook, LibreOffice all do) the read side takes the one that becomes structure.
+**Both legs are now attached.** It converts both ways with RTF (through `rclip-rtf`) and both
+ways with HTML (through `rclip-html`), so an HTML flavor decodes to `RichItem::RichText` rather
+than to markup. Until phase 2 it did not: turning markup into runs needs an HTML tokenizer,
+`rclip-cf-html` states outright that it does not parse HTML, and nothing else in the workspace
+did either.
+
+What HTML still loses on the way in is the cascade — a fragment that styles its text through a
+class rather than through a `style=` attribute arrives unstyled — plus links, images, and lists
+and tables as structure. That is why `read_rank` still puts RTF above HTML: when a source offers
+both (Word, Outlook, LibreOffice all do) the read side takes the one that needs no stylesheet.
+
+A caller that wants the markup itself can still have it: `Options::keep_html_markup(true)` turns
+the decode back into a `RichItem::Html`, which is what a clipboard bridge or an inspector wants
+and what carries `SourceURL` and the surrounding context document. That form now also gets a
+`plain` rendering filled in from the markup, because there is a tokenizer to produce one.
 
 ## Features
 
@@ -130,7 +139,7 @@ the `no_std + alloc` path is kept working because azul targets wasm (`PLAN.md` �
 
 | Feature | Pulls | Covers |
 |---|---|---|
-| `html` | `rclip-cf-html` | `CF_HTML`, `public.html`, `text/html` |
+| `html` | `rclip-cf-html`, `rclip-html` | `CF_HTML`, `public.html`, `text/html` |
 | `rtf` | `rclip-rtf` | `Rich Text Format`, `public.rtf`, `text/rtf` |
 | `dib` | `rclip-dib` | `CF_DIB`, `CF_DIBV5` |
 | `file-list` | `rclip-dropfiles`, `rclip-uri-list` | `CF_HDROP`, `text/uri-list`, GNOME/KDE conventions |
@@ -162,12 +171,6 @@ With `--no-default-features` (no `alloc`) what remains is the fan-out table, whi
 Each of these is a codec-side gap the facade works around rather than going without. They are
 listed so the workaround is visible instead of quietly permanent.
 
-- **An RTF writer.** `rclip-rtf` has none — its `lib.rs` carries `// TODO(phase-2): the writer`.
-  The facade needs one, because on macOS `public.rtf` is the only rich flavor most applications
-  read, so a fan-out that cannot produce RTF cannot publish styled text there at all. The
-  writer in `rich_text::rtf_write` is written to the rules that crate's README states for the
-  writer it is going to grow — minimal font and colour tables, `\uc1`, every non-ASCII character
-  as `\uN?`, never a raw high byte — so the swap is a deletion. `// TODO(phase-2)`.
 - **A percent-*encoder*.** `rclip-uri-list` decodes and validates percent-encoding but does not
   produce it; its `emit` module writes URIs through verbatim and says "percent-encoding them is
   the caller's job". `encode::to_uri` is the mirror of `Uri::percent_decode` and belongs next to
@@ -177,10 +180,12 @@ listed so the workaround is visible instead of quietly permanent.
   `rclip-core`, so it is in `text::decode_html_bytes` here. Note the ordering it exists for:
   `"<b>"` in UTF-16LE is `3C 00 62 00 3E 00`, which is **valid UTF-8**, so a reader that tries
   UTF-8 first and falls back on failure never falls back at all. `// TODO(phase-5)`.
-- **An owned `ShortcutTarget`.** Four codec crates carry a byte-identical borrowed copy with a
-  `// TODO(phase-4): hoist this into rclip-core` against each. `shortcut::LinkTarget` is the
-  owned consumer-facing version; when the hoist happens this becomes a conversion rather than a
-  redefinition.
+- **An owned `ShortcutTarget`.** The shared borrowed type now lives in `rclip-core` and every
+  codec crate in the family re-exports it. `shortcut::LinkTarget` stays as the owned
+  consumer-facing version, because a `Link` outlives the blob it was parsed out of, but it is a
+  *conversion* of the shared type and no longer a second definition of it: `LinkTarget::classify`
+  delegates to `ShortcutTarget::classify`, and `LinkTarget::as_target` and `From<ShortcutTarget>`
+  move between the two.
 
 ## What is advertised and not yet filled
 

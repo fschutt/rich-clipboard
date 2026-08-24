@@ -220,6 +220,38 @@ fn bin_length_past_the_end_is_an_error_not_a_panic() {
 }
 
 #[test]
+fn a_terminal_error_fuses_the_tokenizer() {
+    // The type documents that an `Err` ends the stream rather than
+    // resynchronising, and `\bin` past the end is the case that names itself in
+    // those docs. It used to be the one case where it was not true: the error
+    // paths inside `control_word` returned without marking the lexer done, so
+    // the next `next()` resumed *inside* the region the producer had just
+    // declared to be opaque binary and lexed it as markup.
+    let input = br"{\rtf1\ansi A{\bin93 }}B\par}";
+    let mut tok = Tokenizer::new(input);
+    let err = tok
+        .by_ref()
+        .find_map(|t| t.err())
+        .expect("the declared payload runs past the end");
+    assert_eq!(err.kind, ErrorKind::TooLarge);
+    assert!(
+        tok.next().is_none(),
+        "the tokenizer yielded a token after a terminal error"
+    );
+
+    // Same for the minimal form, which is what the fuzzer reduced it to.
+    let mut tok = Tokenizer::new(br"\bin9}");
+    assert_eq!(tok.next().unwrap().unwrap_err().kind, ErrorKind::TooLarge);
+    assert!(tok.next().is_none(), "six bytes, and it kept going");
+
+    // The table scanners drive `Tokenizer` directly, which is how this was
+    // reachable from safe public API. They must terminate, not loop.
+    let bad = br"{\rtf1{\fonttbl{\f0\fnil\bin9999 Helvetica;}}}";
+    assert!(fonts(bad, Codepage::Windows1252).count() < 8);
+    assert!(colors(bad).count() < 8);
+}
+
+#[test]
 fn truncated_hex_escape_is_malformed() {
     assert_eq!(
         Tokenizer::new(br"\'zz").next().unwrap().unwrap_err().kind,

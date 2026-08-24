@@ -61,9 +61,19 @@
 //! assert_eq!(bolded, "bold");
 //! ```
 //!
+//! # Writing
+//!
+//! [`Writer`] is the inverse, behind `alloc`. It takes *resolved* formatting —
+//! a font name and an RGB colour rather than a `\fN` / `\cfN` index — interns
+//! the two tables itself, and emits a minimal document. Every non-ASCII
+//! character leaves as `\uN` with a one-character ASCII fallback and never as a
+//! raw byte, because the reader on the other end may be running under a
+//! different `\ansicpg` than this document declares. [`Document::to_rtf`] is
+//! the round-tripping form: it writes a parsed document's own tables back
+//! verbatim, so `Document::parse(&doc.to_rtf())` returns an equal `Document`.
+//!
 //! # Not implemented in phase 0
 //!
-//! - **A writer.** `// TODO(phase-2):` `StyledRun[] -> Vec<u8>`.
 //! - **Paragraph properties.** `\pard` is accepted and resets nothing, because
 //!   alignment, indents and spacing are not modelled. `// TODO(phase-1):`
 //! - **Tables, lists, fields and pictures.** `\trowd`, `\pn`, `\field` and
@@ -106,9 +116,9 @@ pub use rclip_core::{Error, ErrorKind, Result};
 #[cfg(feature = "alloc")]
 pub mod document;
 #[cfg(feature = "alloc")]
-pub use document::{Document, OwnedFont, Run};
+pub mod write;
 
-// TODO(phase-2): the writer. `StyledRun[] -> Vec<u8>` behind `alloc`, emitting
-// a minimal `\fonttbl` + `\colortbl` and escaping every non-ASCII character as
-// `\uN` with an ASCII fallback. It must never emit a raw high byte: the reader
-// on the other end may be running under a different `\ansicpg` than we assumed.
+#[cfg(feature = "alloc")]
+pub use document::{Document, OwnedFont, Run};
+#[cfg(feature = "alloc")]
+pub use write::{half_points, write, FontDef, WriteProps, Writer};

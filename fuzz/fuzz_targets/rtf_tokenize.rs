@@ -16,29 +16,14 @@ fuzz_target!(|data: &[u8]| {
     let mut depth: i64 = 0;
     let mut errored = false;
     for tok in Tokenizer::new(data) {
-        // KNOWN BUG, found by this target -- assertion disabled so the suite
-        // stays green, and `regression-bin-past-end-does-not-fuse.bin` in this
-        // target's corpus is the 6-byte input that shows it: `\bin9}`.
-        //
-        // `Tokenizer` documents that "an `Err` is terminal: the iterator fuses
-        // afterwards rather than resynchronising", and names `\bin` past the end
-        // as one of the modes that must fuse. It does not. Every error path in
-        // `escape()` goes through `fail()`, which sets `done`, but the four `?`
-        // paths inside `control_word()` -- the `check_count` for `\binN`, the
-        // `from_utf8`, and the two `skip`s -- return through `Some(self
-        // .control_word(rest))` without ever setting it. The tokenizer then
-        // resumes *inside* the region the producer declared to be opaque binary
-        // and re-reads it as markup, which is exactly the "confident nonsense"
-        // the doc says it avoids. Reachable from safe public API:
-        // `tables::{colors, fonts, generator}` all drive `Tokenizer` directly.
-        //
-        // Not fixed here: `rclip-rtf` is being edited by another agent, and the
-        // brief says to report rather than touch it. The fix is local -- route
-        // `control_word`'s `Result` through `fail()` -- and once it lands, drop
-        // this comment and uncomment the assertion.
-        //
-        // assert!(!errored, "tokenizer yielded a token after a terminal error");
-        let _ = errored;
+        // `Tokenizer` documents that "an `Err` is terminal: the iterator
+        // fuses afterwards rather than resynchronising". This target found the
+        // one path where it did not -- `control_word`'s four `?` returns, of
+        // which `\binN` past the end is the reachable one -- and
+        // `regression-bin-past-end-does-not-fuse.bin` in this target's corpus
+        // is the 6-byte input that showed it. Fixed by routing that `Result`
+        // through `fail()`; this assertion is what keeps it fixed.
+        assert!(!errored, "tokenizer yielded a token after a terminal error");
         match tok {
             Ok(Token::GroupStart) => depth += 1,
             Ok(Token::GroupEnd) => depth -= 1,

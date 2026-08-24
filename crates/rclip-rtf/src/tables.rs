@@ -256,6 +256,13 @@ impl<'a> Iterator for FontTable<'a> {
                     match name {
                         "f" => self.id = param.map(|p| p.clamp(0, 0xFFFF) as u16),
                         "fcharset" => self.charset = param.map(|p| p.clamp(0, 0xFFFF) as u16),
+                        // `\uN` is *part of* the name, not a keyword in front
+                        // of it: a font whose name has a character outside the
+                        // document's code page is written `{\f1\fnil\uc0
+                        // Ma\u241 ana;}`, and cutting the span at the escape
+                        // would leave the name as `ana`. `RtfText::chars`
+                        // decodes it.
+                        "u" => continue,
                         _ => {
                             if let Some(fam) = FontFamily::from_control(name) {
                                 self.family = fam;

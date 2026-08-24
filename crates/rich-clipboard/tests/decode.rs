@@ -126,12 +126,16 @@ fn a_disabled_feature_names_itself_when_nothing_else_is_on_offer() {
 #[cfg(feature = "html")]
 #[test]
 fn cf_html_gives_back_the_fragment_the_context_and_the_source_url() {
+    // With `keep_html_markup`, because `SourceURL` and the context document are
+    // things only the markup form carries — a `RichText` has nowhere to put
+    // either, which is exactly what the option is for.
     let payload = ClipboardPayload::new(Platform::Windows).with(
         "HTML Format",
         fixture("rclip-cf-html", "zero-padded-offsets.bin"),
     );
+    let options = rich_clipboard::Options::new().keep_html_markup(true);
 
-    match decode_payload(&payload).unwrap() {
+    match rich_clipboard::decode_payload_with(&payload, &options).unwrap() {
         RichItem::Html(html) => {
             assert_eq!(html.markup, "<p>Hello, <b>wörld</b> — café</p>");
             assert_eq!(
@@ -139,8 +143,34 @@ fn cf_html_gives_back_the_fragment_the_context_and_the_source_url() {
                 Some("https://example.org/article?q=1#frag")
             );
             assert!(html.context.is_some());
+            // And the plain text no longer has to come from a sibling flavor:
+            // there is a tokenizer now.
+            assert_eq!(html.plain.as_deref(), Some("Hello, wörld — café"));
         }
         other => panic!("expected html, got {other:?}"),
+    }
+}
+
+#[cfg(feature = "html")]
+#[test]
+fn cf_html_decodes_to_styled_runs_by_default() {
+    // The last leg of the hub: an HTML flavor becomes runs, not markup.
+    let payload = ClipboardPayload::new(Platform::Windows).with(
+        "HTML Format",
+        fixture("rclip-cf-html", "zero-padded-offsets.bin"),
+    );
+
+    match decode_payload(&payload).unwrap() {
+        RichItem::RichText(text) => {
+            assert_eq!(text.text, "Hello, wörld — café");
+            let bold: String = text
+                .spans()
+                .filter(|(_, s)| s.bold)
+                .map(|(t, _)| t)
+                .collect();
+            assert_eq!(bold, "wörld");
+        }
+        other => panic!("expected styled text, got {other:?}"),
     }
 }
 
@@ -152,8 +182,9 @@ fn a_plain_text_sibling_becomes_the_html_fragments_fallback() {
     let payload = ClipboardPayload::new(Platform::Unix)
         .with("text/html", &b"<b>hi</b>"[..])
         .with("text/plain;charset=utf-8", &b"hi"[..]);
+    let options = rich_clipboard::Options::new().keep_html_markup(true);
 
-    match decode_payload(&payload).unwrap() {
+    match rich_clipboard::decode_payload_with(&payload, &options).unwrap() {
         RichItem::Html(html) => assert_eq!(html.plain.as_deref(), Some("hi")),
         other => panic!("expected html, got {other:?}"),
     }

@@ -11,27 +11,34 @@ use crate::text;
 
 /// Decoding policy the payload cannot supply for itself.
 ///
-/// One knob so far, and it is the one `plan/PLAN.md` §4.4 says must never be a
-/// silent guess.
+/// Two knobs: the `CF_DIBV5` alpha mode, which `plan/PLAN.md` §4.4 says must
+/// never be a silent guess, and whether an HTML flavor comes back as styled
+/// runs or as the markup it arrived as.
 #[derive(Debug, Clone)]
-// With `dib` off the struct has no fields at all, and a hand-written `Default`
-// for an empty struct is exactly what `clippy::derivable_impls` objects to.
+// Only `alpha` has a default that is not the derived one, so only a build with
+// `dib` needs the impl written out; anywhere else a hand-written one is exactly
+// what `clippy::derivable_impls` objects to.
 #[cfg_attr(not(feature = "dib"), derive(Default))]
 #[non_exhaustive]
 pub struct Options {
     #[cfg(feature = "dib")]
     alpha: rclip_dib::AlphaMode,
+    #[cfg(feature = "html")]
+    keep_html_markup: bool,
 }
 
 #[cfg(feature = "dib")]
 impl Default for Options {
     fn default() -> Self {
-        // `Guess` rather than `Straight`, because the two producers a desktop
-        // paste is most likely to come from — Chromium and Firefox — both write
-        // premultiplied, and the heuristic is one-directional in the safe
-        // direction: it only ever *proves* straight.
         Self {
+            // `Guess` rather than `Straight`, because the two producers a
+            // desktop paste is most likely to come from — Chromium and Firefox
+            // — both write premultiplied, and the heuristic is one-directional
+            // in the safe direction: it only ever *proves* straight.
+            #[cfg(feature = "dib")]
             alpha: rclip_dib::AlphaMode::Guess,
+            #[cfg(feature = "html")]
+            keep_html_markup: false,
         }
     }
 }
@@ -61,6 +68,26 @@ impl Options {
     #[cfg(feature = "dib")]
     pub(crate) fn wire_alpha(&self) -> rclip_dib::AlphaMode {
         self.alpha
+    }
+
+    /// Hand back an HTML flavor as markup rather than as styled runs.
+    ///
+    /// By default an HTML flavor decodes to [`RichItem::RichText`]: the
+    /// fragment is tokenized and its inline styling becomes runs, which is what
+    /// an application that pastes *content* wants and what closes the last leg
+    /// of the [`RichText`](crate::RichText) hub.
+    ///
+    /// Turn this on and it decodes to [`RichItem::Html`] instead, markup
+    /// intact. That is what a clipboard bridge, an inspector, or anything that
+    /// will re-publish the payload wants, because the conversion to runs is
+    /// lossy in ways the markup is not: links, images and table structure have
+    /// nowhere to go in a `RichText`, and `SourceURL` and the surrounding
+    /// context document are carried only by [`HtmlFragment`](crate::HtmlFragment).
+    #[cfg(feature = "html")]
+    #[must_use]
+    pub fn keep_html_markup(mut self, keep: bool) -> Self {
+        self.keep_html_markup = keep;
+        self
     }
 }
 
@@ -97,7 +124,7 @@ pub fn decode_with(
     match item.flavor(platform) {
         Flavor::PlainText => Ok(RichItem::Text(text::decode_plain(bytes, platform))),
 
-        Flavor::Html => decode_html(native, bytes, platform),
+        Flavor::Html => decode_html(native, bytes, platform, options),
         Flavor::Rtf => decode_rtf(native, bytes),
 
         Flavor::Png => Ok(encoded_image(ImageFormat::Png, bytes)),
@@ -367,30 +394,53 @@ fn encoded_image(format: ImageFormat, bytes: &[u8]) -> RichItem {
 // ---------------------------------------------------------------------------
 
 #[cfg(feature = "html")]
-fn decode_html(native: &str, bytes: &[u8], platform: Platform) -> Result<RichItem> {
+fn decode_html(
+    native: &str,
+    bytes: &[u8],
+    platform: Platform,
+    options: &Options,
+) -> Result<RichItem> {
     use crate::item::HtmlFragment;
 
-    if platform == Platform::Windows {
+    let mut fragment = if platform == Platform::Windows {
         let parsed = rclip_cf_html::parse(bytes).map_err(|e| Error::codec(native, e))?;
-        return Ok(RichItem::Html(HtmlFragment {
+        HtmlFragment {
             markup: String::from(parsed.fragment),
             context: parsed.context.map(String::from),
             source_url: parsed.source_url.map(String::from),
             plain: None,
-        }));
+        }
+    } else {
+        // `public.html` and `text/html` are bare markup with no header — and an
+        // unreliable encoding, which `text::decode_html_bytes` sniffs.
+        HtmlFragment {
+            markup: text::decode_html_bytes(bytes),
+            context: None,
+            source_url: None,
+            plain: None,
+        }
+    };
+
+    if options.keep_html_markup {
+        // The markup is what was asked for, but the plain text no longer has to
+        // be guessed at: there is a tokenizer now, so `RichItem::plain_text`
+        // can answer for an HTML item instead of returning `None`.
+        fragment.plain = fragment.to_rich_text().ok().map(|t| t.text);
+        return Ok(RichItem::Html(fragment));
     }
-    // `public.html` and `text/html` are bare markup with no header — and an
-    // unreliable encoding, which `text::decode_html_bytes` sniffs.
-    Ok(RichItem::Html(HtmlFragment {
-        markup: text::decode_html_bytes(bytes),
-        context: None,
-        source_url: None,
-        plain: None,
-    }))
+    fragment
+        .to_rich_text()
+        .map(RichItem::RichText)
+        .map_err(|e| Error::codec(native, e))
 }
 
 #[cfg(not(feature = "html"))]
-fn decode_html(_native: &str, _bytes: &[u8], _platform: Platform) -> Result<RichItem> {
+fn decode_html(
+    _native: &str,
+    _bytes: &[u8],
+    _platform: Platform,
+    _options: &Options,
+) -> Result<RichItem> {
     Err(Error::FeatureDisabled {
         flavor: "Html",
         feature: "html",

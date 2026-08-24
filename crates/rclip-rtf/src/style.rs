@@ -110,6 +110,22 @@ pub enum FontFamily {
 }
 
 impl FontFamily {
+    /// The control word that declares this family in a `\fonttbl` entry,
+    /// without its backslash.
+    #[must_use]
+    pub const fn control_word(self) -> &'static str {
+        match self {
+            Self::Nil => "fnil",
+            Self::Roman => "froman",
+            Self::Swiss => "fswiss",
+            Self::Modern => "fmodern",
+            Self::Script => "fscript",
+            Self::Decor => "fdecor",
+            Self::Tech => "ftech",
+            Self::Bidi => "fbidi",
+        }
+    }
+
     pub(crate) fn from_control(name: &str) -> Option<Self> {
         Some(match name {
             "fnil" => Self::Nil,

@@ -1,7 +1,7 @@
 # rclip-rtf
 
-RTF reader for clipboard-grade styled text — `no_std`, `forbid(unsafe_code)`, no allocation
-while parsing.
+RTF reader **and writer** for clipboard-grade styled text — `no_std`, `forbid(unsafe_code)`, no
+allocation while parsing.
 
 **Format:** Rich Text Format 1.9.1 (Microsoft, "Rich Text Format (RTF) Specification, Version
 1.9.1"). Semantics were checked against the published spec text rather than written from memory;
@@ -17,6 +17,9 @@ alongside `CF_HTML` and it is the higher-fidelity of the two. See `plan/PLAN.md`
 bytes ──▶ Tokenizer ──▶ Parser ──▶ StyledRun        no_std, borrowing
                     └─▶ fonts() / colors() / generator()
                                     └──▶ Document   feature "alloc"
+
+Writer / WriteProps ─────────────▶ bytes            feature "alloc"
+Document::to_rtf    ─────────────▶ bytes            feature "alloc"
 ```
 
 `Tokenizer` is a pure lexer with no state beyond a cursor. `Parser` adds the group stack, the
@@ -68,6 +71,16 @@ and `rtf-parser` and `rtf-grimoire` each have zero reverse dependencies.
 the one thing the plan singles out as the make-or-break detail — the `\ucN` skip counter — is
 either absent, ignored, or implemented as a heuristic that fails on the fallback form real
 writers emit.
+
+### And for the writer (phase 2)
+
+Nothing changed the verdict. Of the five crates above only `dazzle-backend-rtf` writes RTF at all
+— it is a GNOME Builder documentation backend that emits paragraphs and has no character
+formatting, no `\uN` and no code-page story — and none of the parsers has a serializer to pair
+with. `compressed-rtf` is MS-OXRTFCP container compression, which is a layer below this one and
+not something a clipboard carries. The writer here is the parser's inverse and shares its escape
+tables, which is worth more than any of them would have been: the two halves cannot drift, because
+`parse(write(x)) == x` is a test rather than an aspiration.
 
 ## What is implemented
 
@@ -124,12 +137,45 @@ there even though the page is fully supported.
 
 Fixtures: `hex-escapes-cp1251.bin`, `mac-charset.bin`, `pc-charset-cp437.bin`.
 
+## The writer (`alloc`)
+
+**Done** — was `// TODO(phase-2):`. Two entry points, because there are two callers:
+
+- **[`Writer`]** takes *resolved* formatting — a font name and an RGB colour rather than a `\fN` /
+  `\cfN` index — interns the two tables itself, and merges adjacent runs whose formatting matches.
+  This is what a caller converting from another styled-text representation wants, and it is what
+  the `rich-clipboard` facade uses. `write(runs)` is the one-shot form.
+- **`Document::to_rtf`** writes a parsed document's own tables back *verbatim*: same `\fN` ids,
+  same colour positions, omitted "auto" entries still omitted. So `Document::parse(&d.to_rtf())`
+  returns a document equal to `d` rather than one that renders the same with the tables
+  renumbered. That exactness is the primary test.
+
+The four rules the output obeys, each of them a way real writers corrupt text:
+
+1. **Nothing outside ASCII is ever a byte.** Every non-ASCII character leaves as `\uN` with a
+   one-character ASCII fallback. A `\'hh` escape decodes correctly only under the code page the
+   document declares, and a reader running under a different one gets a *different character*
+   rather than a visible gap.
+2. **`\uc1` is stated in the header and honoured.** One fallback character per `\uN`, never two —
+   a writer that declares `\uc1` and emits a two-character fallback makes every conforming reader
+   eat a character of real text. That is why the fallback table has no `...` for an ellipsis. A
+   character outside the BMP is two escapes and therefore two fallback characters, which is what
+   the counter is defined to mean and what Word does.
+3. **`\fsN` is half-points.** 12pt is `\fs24`; `half_points()` does the conversion, including
+   returning the RTF default for anything an `\fsN` parameter cannot hold.
+4. **The first `\colortbl` entry is empty.** Dropping the leading `;` shifts every colour index
+   by one and recolours the whole document.
+
+Plus: `\`, `{` and `}` escaped in text; `;` escaped as `\'3b` in a font name, because it would
+otherwise terminate the entry; `\r\n` written as one `\par` and not two.
+
+What it does not write: paragraph properties, `\deflang`, a style sheet, pictures, tables, or a
+`{\*\generator}` unless one is asked for.
+
+[`Writer`]: https://docs.rs/rclip-rtf
+
 ## Not implemented in phase 0
 
-- **The writer.** `// TODO(phase-2):` `StyledRun[] -> Vec<u8>` behind `alloc`, emitting a minimal
-  font/colour table and escaping every non-ASCII character as `\uN` with an ASCII fallback. It
-  must never emit a raw high byte, because the reader on the other end may be running under a
-  different `\ansicpg` than we assumed.
 - **Paragraph properties.** `\pard` is accepted and resets nothing; alignment, indents and
   spacing are not modelled. `// TODO(phase-1):`
 - **Tables, lists, fields and pictures** contribute no structure. Cells are separated by a tab
@@ -161,6 +207,26 @@ Fixtures: `hex-escapes-cp1251.bin`, `mac-charset.bin`, `pc-charset-cp437.bin`.
   would silently drop the rest of the group.
 - `CF_RTF` arrives off the Windows clipboard NUL-terminated, which the spec does not mention. The
   NUL is dropped as a stream artefact, like CR and LF.
+- **AppKit reads `\cb` for a character background and ignores `\highlight`; Word writes
+  `\highlight` and RichEdit reads it.** Verified with `NSAttributedString(rtf:)`: a run with only
+  `\highlight1` comes back with no `NSBackgroundColorAttributeName` at all, and the same run with
+  `\cb1` comes back with the colour. `\chcbpat1` is ignored by AppKit too. The writer therefore
+  emits `\cbN\highlightN` — both spellings, which this crate's own parser folds back to one
+  index.
+- **AppKit decodes `\'hh` inside a `\fonttbl` name but not `\uN`.** `{\f1\fnil\fcharset0
+  G\'65orgia;}` resolves to Georgia; `G\u101 orgia` — with or without `\uc0`, with or without a
+  fallback character — resolves to nothing and the run falls back to the system font. The writer
+  still emits `\uN` there, under `\uc0` and with no fallback character, because it is the
+  spelling that is correct under every code page and the cost of AppKit not reading it is a font
+  substitution, which is what an unresolvable name gets anyway.
+- **AppKit reads a `\colortbl` entry as device RGB, not sRGB.** Round-tripping pure sRGB red
+  through `NSAttributedString` and back gives `\red251\green0\blue7`, and reading our
+  `\red255\green0\blue0` back out as sRGB gives `#FF2600`. There is no colour-space field in
+  `\colortbl` to state which was meant, so the writer emits the caller's sRGB values unconverted
+  and the few units of drift are unavoidable without a colour-management stack.
+- `\plain` really does reset everything in AppKit — font, size, colour and every toggle — which is
+  what lets the writer state each run's formatting in full and let nothing leak across a boundary.
+  Verified rather than assumed.
 - `{\*\generator}` is emitted by Word (`Riched20 10.0.19041;`) but **not** by Cocoa — verified
   against `textutil` output, which writes `\cocoartf2822` instead and no generator destination at
   all. Do not rely on it being present.
@@ -171,20 +237,40 @@ Fixtures: `hex-escapes-cp1251.bin`, `mac-charset.bin`, `pc-charset-cp437.bin`.
 
 ## Fixtures
 
-`corpus/synthetic/rclip-rtf/`, twelve documents with `.json` sidecars. They use the `.rtf`
+`corpus/synthetic/rclip-rtf/`, fourteen documents with `.json` sidecars. They use the `.rtf`
 extension rather than the `.bin` of `plan/CONVENTIONS.md` because they are real RTF documents and
 open in TextEdit, which is useful when one of them starts disagreeing with a real writer.
 
+Two of them — `written-styled-runs.bin` and `written-escapes.bin` — are the *writer's* output,
+pinned so that a change in what it emits shows up in a diff rather than only inside an assertion.
 Four are malformed and assert an `ErrorKind` rather than a panic: `unclosed-group.rtf`
 (`UnexpectedEof`), `extra-close-brace.rtf` (`Malformed`), `depth-bomb.rtf` (`DepthLimit`, 128
 nested groups) and `not-rtf.rtf` (`BadMagic`, HTML offered under an RTF flavor). Beyond those,
 the test suite feeds every prefix of every fixture, and 400 three-byte mutations of each, through
 every entry point and asserts only that nothing panics.
 
+## The AppKit oracle
+
+`plan/PLAN.md` §5d names `NSAttributedString(rtf:documentAttributes:)` as *the* oracle for this
+crate: if AppKit round-trips our RTF to the same attributed string, it is correct by definition.
+The writer was developed against it rather than only against this crate's own parser, using a
+short Objective-C harness that loads a file and dumps every attribute run.
+
+What it confirmed: bold, italic, underline, strikethrough, `\fsN` half-points (including the odd
+values — `\fs21` is 10.5pt), font family by name, `\cfN`, `\cbN`, `\par`, `\tab`, `\uN` with
+the `\uc1` fallback correctly skipped, surrogate pairs, `\uc2` with two fallback characters, an
+empty `\fonttbl` name, a document with no `\fonttbl` at all, and `\plain` as a full reset.
+Re-emitting four corpus fixtures through `Document::to_rtf` produced attribute dumps identical to
+the originals', character for character and attribute for attribute.
+
+What it contradicted, and changed the writer: `\highlight` alone produces no background attribute
+— see the section above.
+
 ## Verify
 
 ```sh
 cargo test  -p rclip-rtf
 cargo build -p rclip-rtf --no-default-features
+cargo build -p rclip-rtf --no-default-features --features alloc --target thumbv7em-none-eabi
 cargo clippy -p rclip-rtf --all-targets --all-features -- -D warnings
 ```

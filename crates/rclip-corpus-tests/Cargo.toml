@@ -26,9 +26,7 @@ rclip-desktop-entry = { workspace = true, features = ["std"] }
 rclip-dib = { workspace = true, features = ["std"] }
 rclip-dropfiles = { workspace = true, features = ["std"] }
 rclip-file-desc = { workspace = true, features = ["std"] }
-# Not `workspace = true`: `rclip-html` is new in phase 2 and is not in the root
-# `[workspace.dependencies]` yet.
-rclip-html = { path = "../rclip-html", features = ["std"] }
+rclip-html = { workspace = true, features = ["std"] }
 rclip-idlist = { workspace = true, features = ["std"] }
 rclip-rtf = { workspace = true, features = ["std"] }
 rclip-shell-link = { workspace = true, features = ["std"] }

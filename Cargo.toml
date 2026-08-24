@@ -21,6 +21,7 @@ rclip-desktop-entry = { version = "0.1.0", path = "crates/rclip-desktop-entry" }
 rclip-dib = { version = "0.1.0", path = "crates/rclip-dib" }
 rclip-dropfiles = { version = "0.1.0", path = "crates/rclip-dropfiles" }
 rclip-file-desc = { version = "0.1.0", path = "crates/rclip-file-desc" }
+rclip-html = { version = "0.1.0", path = "crates/rclip-html" }
 rclip-idlist = { version = "0.1.0", path = "crates/rclip-idlist" }
 rclip-rtf = { version = "0.1.0", path = "crates/rclip-rtf" }
 rclip-shell-link = { version = "0.1.0", path = "crates/rclip-shell-link" }

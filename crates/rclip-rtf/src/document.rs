@@ -130,6 +130,68 @@ impl Document {
         Ok(doc)
     }
 
+    /// Serialize back to RTF.
+    ///
+    /// The tables go out **verbatim** — the same `\fN` ids, the same colour
+    /// positions, the omitted "auto" entries still omitted — so indices keep
+    /// meaning what they meant and `Document::parse(&doc.to_rtf())` gives back
+    /// an equal `Document` rather than an equivalent one with the tables
+    /// renumbered. [`crate::Writer`] is the other direction of travel, for a
+    /// caller that has font names and RGB colours rather than indices.
+    ///
+    /// # What changes
+    ///
+    /// - **The code page.** The output declares `\ansicpg1252` whatever the
+    ///   input declared, because it contains no `\'hh` bytes for a code page to
+    ///   apply to: the text is Unicode by the time it is in a `Document`, and
+    ///   every non-ASCII character leaves as `\uN`.
+    /// - **Font names lose leading and trailing ASCII whitespace**, which the
+    ///   reader trims on the way back in.
+    /// - **`\r` becomes a paragraph break**, and `\r\n` becomes one rather
+    ///   than two.
+    /// - **Text no run covers** is written with default formatting rather than
+    ///   dropped. `Document::parse` never produces such a gap; a hand-built
+    ///   `Document` can.
+    #[must_use]
+    pub fn to_rtf(&self) -> Vec<u8> {
+        let fonts: Vec<crate::write::FontDef<'_>> = self
+            .fonts
+            .iter()
+            .map(|f| crate::write::FontDef {
+                id: f.id,
+                family: f.family,
+                charset: f.charset,
+                name: &f.name,
+            })
+            .collect();
+
+        // Runs, plus any text between them, in order.
+        let mut parts: Vec<(&str, CharProps)> = Vec::with_capacity(self.runs.len());
+        let mut at = 0usize;
+        for run in &self.runs {
+            if run.range.start > at {
+                if let Some(gap) = self.text.get(at..run.range.start) {
+                    parts.push((gap, CharProps::DEFAULT));
+                }
+            }
+            parts.push((self.run_text(run), run.props));
+            at = at.max(run.range.end);
+        }
+        if let Some(tail) = self.text.get(at..) {
+            if !tail.is_empty() {
+                parts.push((tail, CharProps::DEFAULT));
+            }
+        }
+
+        crate::write::write_document(
+            &fonts,
+            &self.colors,
+            self.default_font,
+            self.generator.as_deref(),
+            parts.into_iter(),
+        )
+    }
+
     /// The text of one run.
     #[must_use]
     pub fn run_text(&self, run: &Run) -> &str {

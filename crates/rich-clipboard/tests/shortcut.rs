@@ -6,6 +6,7 @@
 
 #![cfg(feature = "shortcut")]
 
+use rclip_core::ShortcutTarget;
 use rich_clipboard::{Link, LinkTarget};
 
 fn fixture(krate: &str, name: &str) -> Vec<u8> {
@@ -102,4 +103,53 @@ fn a_windows_path_is_classified_as_a_path_and_not_as_a_one_letter_scheme() {
 #[test]
 fn a_shortcut_file_that_is_none_of_the_four_is_refused_and_not_guessed_at() {
     assert!(Link::from_file(b"just some text").is_err());
+}
+
+#[test]
+fn the_owned_type_and_the_shared_borrowed_one_agree_variant_for_variant() {
+    // `LinkTarget` is the owned counterpart of `rclip_core::ShortcutTarget`,
+    // not a second definition of it. If they ever disagreed, a `.url` parsed
+    // through `rclip-url-file` and the same `.url` parsed through `Link` would
+    // classify differently, which is exactly the bug the phase-4 hoist exists
+    // to make impossible.
+    for s in [
+        r"C:\Users\me\notes.txt",
+        r"\\server\share",
+        r"\\?\C:\long",
+        "/home/me",
+        "https://example.com/?a=1&b=2",
+        "mailto:someone@example.com",
+        "some-file.txt",
+        "1nvalid-scheme:x",
+        "",
+    ] {
+        let owned = LinkTarget::classify(s);
+        let borrowed = ShortcutTarget::classify(s);
+
+        assert_eq!(
+            LinkTarget::from(borrowed),
+            owned,
+            "{s:?}: the two classifications disagree"
+        );
+        assert_eq!(
+            owned.as_target(),
+            borrowed,
+            "{s:?}: borrowing the owned value back does not round-trip"
+        );
+        assert_eq!(owned.as_str(), s, "{s:?}: the text survives either way");
+    }
+}
+
+#[test]
+fn a_parsed_shortcut_hands_back_the_same_target_through_either_type() {
+    // The codec crate returns the borrowed type; `Link` returns the owned one.
+    // Same file, same answer.
+    let bytes = fixture("rclip-url-file", "minimal-lf.bin");
+    let link = Link::from_url_file(&bytes).expect("a well-formed .url");
+    let file = rclip_url_file::parse(&bytes).expect("the same bytes");
+
+    assert_eq!(
+        link.target.as_target(),
+        file.target().expect("the URL key is required"),
+    );
 }

@@ -1,0 +1,29 @@
+[package]
+name        = "rclip-html"
+description = "Minimal HTML tokenizer for clipboard payloads: markup in, styled text runs out"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[features]
+default = []
+## Enables `Document` — the owned, merged-run representation. Tokenizing itself
+## never needs it; only text that character references and whitespace
+## collapsing made non-contiguous does.
+alloc = ["rclip-core/alloc"]
+std = ["alloc", "rclip-core/std"]
+
+[dependencies]
+rclip-core = { workspace = true }
+
+# No third-party dependencies. See README.md "Prior art" for the crates that
+# were evaluated and why none of them are here.
+
+## Self dev-dependency so `cargo test -p rclip-html` exercises the `alloc` half
+## of the crate too, without making `alloc` a default feature. Cargo permits
+## dev-dependency cycles; `cargo build --no-default-features` is unaffected.
+[dev-dependencies]
+rclip-html = { path = ".", features = ["std"] }
