@@ -1,0 +1,7 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "A root folder, an item with unrecognised class 0x88, then a volume",
+  "notes": "0x88 & 0x70 == 0x00, which matches no known family. The list must still yield all three items, with the middle one as ShellItem::Unknown carrying its raw bytes. A PIDL from an unknown shell extension cannot be allowed to break the items around it."
+}

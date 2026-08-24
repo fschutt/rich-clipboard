@@ -1,0 +1,7 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "StringData with IsUnicode CLEAR, so each field is 2 + count*1 bytes",
+  "notes": "The other half of the character-vs-byte rule. A parser that always multiplies by two reads past the end here; one that never does reads half of with-string-data.bin."
+}

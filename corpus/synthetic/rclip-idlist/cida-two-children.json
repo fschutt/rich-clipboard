@@ -1,0 +1,7 @@
+{
+  "format": "CFSTR_SHELLIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "CIDA with cidl=2: a My Computer parent and two file entry children",
+  "notes": "aoffset[0] is the parent, aoffset[1..2] the children, all relative to the start of the CIDA. Child 2's primary name is the 8.3 form so that the long name from the extension block is the only readable one."
+}

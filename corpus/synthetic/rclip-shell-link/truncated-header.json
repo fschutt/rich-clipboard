@@ -1,0 +1,8 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "error",
+  "error_kind": "UnexpectedEof",
+  "description": "Only 40 of the 76 header bytes",
+  "notes": "The header is fixed-size, so a short one cannot be partially trusted."
+}

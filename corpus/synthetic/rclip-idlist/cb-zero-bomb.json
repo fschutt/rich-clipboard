@@ -1,0 +1,7 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "A cb of zero in the middle of the list, with more bytes after it",
+  "notes": "THE fixture for this crate. cb=0 is the defined terminator, so the walk must stop here and report 22 bytes consumed - but a parser that does `pos += cb` without special-casing zero never advances and hangs. The trailing bytes exist so that a hung parser hangs on real-looking data."
+}

@@ -1,0 +1,7 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "Two items: root folder {20D04FE0-...} (My Computer), then volume 'C:\\'",
+  "notes": "Minimal well-formed list. Item sizes 20 and 25, then the u16 terminator."
+}

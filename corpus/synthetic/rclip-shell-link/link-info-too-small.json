@@ -1,0 +1,8 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "error",
+  "error_kind": "BadLength",
+  "description": "LinkInfoSize of 0x10, below the 0x1C of mandatory header fields",
+  "notes": "Every offset in LinkInfo is relative to its own start, so a truncated header makes them all meaningless."
+}

@@ -1,0 +1,8 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "error",
+  "error_kind": "UnexpectedEof",
+  "description": "IDListSize claims 32767 bytes with two bytes of input left",
+  "notes": "IDListSize bounds the delegated ITEMIDLIST walk; it has to be checked before the walk starts."
+}

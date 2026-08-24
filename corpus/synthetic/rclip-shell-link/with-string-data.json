@@ -1,0 +1,7 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "All five StringData fields, IsUnicode set",
+  "notes": "CountCharacters is in characters, so each field is 2 + count*2 bytes. In wire order: NAME_STRING, RELATIVE_PATH, WORKING_DIR, COMMAND_LINE_ARGUMENTS, ICON_LOCATION."
+}

@@ -1,0 +1,7 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "One EnvironmentVariableDataBlock (0xA0000001, 0x314 bytes), then the terminal block",
+  "notes": "260-byte ANSI half then 520-byte UTF-16 half, both NUL-terminated inside fixed-width fields."
+}

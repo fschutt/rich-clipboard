@@ -1,0 +1,8 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "error",
+  "error_kind": "UnexpectedEof",
+  "description": "Second item declares cb=255 with only 4 bytes left in the buffer",
+  "notes": "A length field pointing past the end. Must be UnexpectedEof at offset 20."
+}

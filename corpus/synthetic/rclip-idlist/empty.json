@@ -1,0 +1,7 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "A list containing nothing but the terminator",
+  "notes": "Zero items, terminated, 2 bytes consumed. Legal and does happen."
+}

@@ -1,0 +1,8 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "error",
+  "error_kind": "BadLength",
+  "description": "A cb of one: a size field that does not cover itself",
+  "notes": "cb counts its own two bytes, so cb=1 is impossible. Advancing by 1 would misalign every subsequent item and reparse the same bytes at a sliding offset. Must be ErrorKind::BadLength at offset 20."
+}

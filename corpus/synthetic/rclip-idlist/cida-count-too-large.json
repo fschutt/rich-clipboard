@@ -1,0 +1,8 @@
+{
+  "format": "CFSTR_SHELLIDLIST",
+  "origin": "synthetic",
+  "expect": "error",
+  "error_kind": "TooLarge",
+  "description": "CIDA declaring cidl = 0xFFFFFFFF in a 12-byte buffer",
+  "notes": "cidl sizes the offset table and any loop over it. Checking it against the bytes actually present is what keeps a 12-byte payload from becoming a 16 GiB read."
+}

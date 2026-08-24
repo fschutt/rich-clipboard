@@ -1,0 +1,8 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "error",
+  "error_kind": "BadMagic",
+  "description": "Correct HeaderSize, all-zero LinkCLSID",
+  "notes": "The CLSID is the only thing that says these bytes are a shell link at all. A .lnk parser is the last place to be guessing about its input."
+}

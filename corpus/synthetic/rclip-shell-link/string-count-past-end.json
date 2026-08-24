@@ -1,0 +1,8 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "error",
+  "error_kind": "UnexpectedEof",
+  "description": "NAME_STRING declares 65535 characters with two bytes of input left",
+  "notes": "The character-count trap. 65535 * 2 = 131070 bytes, which must be computed in usize: doing the multiply in u16 wraps to 65534 in release and produces a plausible-looking short read instead of an error."
+}

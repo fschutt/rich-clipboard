@@ -1,0 +1,7 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "One 0x32 file entry for wordpad.exe with a version-3 0xBEEF0004 extension block",
+  "notes": "Byte-for-byte the layout of libfwsi's fwsi_test_file_entry_values_data1 vector: cb=0x48, primary name 'wordpad.exe' in ASCII, long name in UTF-16LE at block offset 20, trailing first-extension-block offset 0x001A."
+}

@@ -1,0 +1,8 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "error",
+  "error_kind": "BadLength",
+  "description": "An ExtraData block declaring BlockSize = 6",
+  "notes": "6 is at or above the terminal threshold of 4 but below the 8 bytes needed for a size and a signature. Skipping it would resume the walk inside the next block's fields; it must be rejected."
+}

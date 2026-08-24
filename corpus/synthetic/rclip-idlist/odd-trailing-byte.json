@@ -1,0 +1,8 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "error",
+  "error_kind": "UnexpectedEof",
+  "description": "One stray byte after a well-formed item, where a cb field should start",
+  "notes": "Running out on an exact item boundary is a clean end of list; running out mid-field is truncation and must be reported, not silently dropped."
+}

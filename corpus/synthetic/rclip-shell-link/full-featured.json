@@ -1,0 +1,7 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "Every section: target IDList, LinkInfo with a VolumeID, all five StringData fields, and nine ExtraData blocks including the unassigned 0xA000000A signature",
+  "notes": "The 0xA000000A block is deliberate: MS-SHLLINK 10.0 leaves that signature unassigned, and an unknown signature must round-trip as Unknown rather than failing the parse. IconIndex is negative (a resource ID, not an index) and the hotkey is Ctrl+Alt+A."
+}

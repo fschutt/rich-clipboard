@@ -1,0 +1,8 @@
+{
+  "format": "CFSTR_SHELLIDLIST",
+  "origin": "synthetic",
+  "expect": "error",
+  "error_kind": "BadOffset",
+  "description": "CIDA whose only child offset is 0xFFFF0000, far past the buffer",
+  "notes": "aoffset entries are attacker-controlled indices. The parent must still read correctly; only the bad child errors."
+}

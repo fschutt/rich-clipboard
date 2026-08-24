@@ -1,0 +1,7 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "A 76-byte header with LinkFlags = 0 and no optional sections",
+  "notes": "The smallest legal shell link. No StringData, no ExtraData, not even a terminal block."
+}

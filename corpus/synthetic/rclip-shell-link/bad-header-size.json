@@ -1,0 +1,8 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "error",
+  "error_kind": "BadLength",
+  "description": "HeaderSize claims 0x50 where the spec fixes it at 0x4C",
+  "notes": "HeaderSize doubles as the offset of the next section, so a wrong one misplaces everything after it."
+}

@@ -1,0 +1,7 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "LinkInfo with a CommonNetworkRelativeLink instead of a VolumeID",
+  "notes": "NetNameOffset is exactly 0x14, so the Unicode offset fields are absent. ValidDevice and ValidNetType are both set; the provider is WNNC_NET_DAV."
+}

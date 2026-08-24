@@ -1,0 +1,25 @@
+[package]
+name        = "rclip-idlist"
+description = "Windows shell ITEMIDLIST / PIDL / CIDA parser: defensive, no_std, allocation-free"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[features]
+default = []
+## Enables the `ItemIdListBuilder` and the lossy string/path helpers.
+alloc = ["rclip-core/alloc"]
+std = ["alloc", "rclip-core/std"]
+
+[dependencies]
+rclip-core = { workspace = true }
+
+# A dev-dependency on this crate itself, so that `cargo test -p rclip-idlist`
+# builds the integration tests with `std` on. The tests exercise the `alloc`
+# API, and the alternative -- `required-features` on the test target -- makes a
+# plain `cargo test` skip them silently, which is worse than not having them.
+[dev-dependencies]
+rclip-idlist = { path = ".", features = ["std"] }
