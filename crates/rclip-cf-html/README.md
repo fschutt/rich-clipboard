@@ -101,14 +101,43 @@ Recorded here because each one is a decision this crate had to make:
    plenty of current software still writes `0.9`. `CfHtmlBuilder` defaults to `0.9` for that
    reason: every consumer in existence accepts it.
 
+## Two decisions the spec leaves open
+
+**A leading UTF-8 BOM is skipped for line reading and *counted* for every offset.**
+`EF BB BF` before `Version:` used to end the header before it began — the first line's "key" is
+not ASCII, so the scan stopped and the blob came back `BadMagic`. It is now handled, and the
+question the spec does not answer is which of the two readings the producer meant, since a
+`CF_HTML` offset is a byte count from the start of the blob. The answer taken here: the blob
+starts where the blob starts. A producer that prepends a BOM is measuring positions in the very
+buffer it is writing, and that buffer has the BOM in it, so `header_len` includes the mark and
+every offset resolves against the payload untouched.
+
+A producer that disagreed is not left in ruins: its `StartHTML` comes out three bytes short and
+is clamped up to the end of the header, and its fragment offsets lose to the
+`<!--StartFragment-->` comments, which move with the content. The one thing it costs is the last
+three bytes of the *context*, which `EndHTML` then under-reports. `Header::bom_len` is exposed so
+a caller that wants to detect and compensate can compare it against `header_len`.
+
+**No real capture carries one.** `corpus/macos/safari/public.html` and
+`corpus/macos/textedit/` were checked: macOS publishes bare HTML with no `CF_HTML` description
+header at all, and nothing in the corpus prepends `EF BB BF` to anything but a UTF-16 payload,
+where `FF FE` is a different mark entirely. The handling is therefore defensive rather than
+observed — but the old behaviour was to reject the payload outright, which is not a defensible
+place to leave it.
+
+**A repeated keyword takes its first value**, and `Header::duplicate_keys` records that it
+happened. The spec floats "multiple StartFragment and EndFragment pairs [...] to support
+noncontiguous selection of fragments" as a future extension. Checked against reality: nothing
+emits them — not Chrome, not Firefox, not Word, not Windows itself — and there is nowhere in a
+borrowed, non-allocating return type to put a list of them if they did. So a repeat today is a
+producer bug or a deliberate ambiguity, and the two readings of it disagree about *which bytes
+the user copied*, which makes it a parser-differential rather than a cosmetic question.
+First-wins is the reading that cannot be changed by appending to a header. Rejecting the payload
+was the alternative and was refused for the same reason `Version:1.1` is accepted: a paste that
+silently does nothing is worse than one that drops a field nobody writes.
+
 ## Not implemented yet
 
-- `// TODO(phase-1):` A leading UTF-8 BOM on the blob. Producers that prepend one shift every
-  offset by three bytes relative to where a BOM-stripping reader would look. Unobserved so far;
-  needs a real capture before guessing at a policy.
-- `// TODO(phase-1):` Multiple `StartFragment`/`EndFragment` pairs. The spec floats these for
-  non-contiguous selections; nothing emits them. Extra pairs currently overwrite each other and
-  the last one wins.
 - `// TODO(phase-2):` Converting the fragment into the shared `RichText` type. That belongs
   with the HTML tokenizer, not here — this crate's job ends at handing back a `&str` of markup.
 - No HTML parsing of any kind. The fragment is returned as bytes-that-are-a-`&str`; it is not

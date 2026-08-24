@@ -968,3 +968,247 @@ fn a_multibyte_console_code_page_does_not_resolve_to_a_single_byte_table() {
         "a DBCS code page must not resolve to a single-byte table"
     );
 }
+
+// ---------------------------------------------------------------- MS-PROPSTORE
+//
+// Phase 3: the PropertyStoreDataBlock stopped being opaque bytes.
+
+use rclip_shell_link::propstore::{
+    self, PropertyName, PropertyValue, FMTID_APP_USER_MODEL, FMTID_STRING_NAMED,
+    PID_APP_USER_MODEL_ID,
+};
+
+#[test]
+fn the_property_store_block_yields_the_app_user_model_id() {
+    let buf = fixture("property-store-app-id.bin");
+    let link = ShellLink::parse(&buf).expect("well formed");
+
+    let id = link.app_user_model_id().expect("an AppUserModelID");
+    assert_eq!(id.to_string_lossy(), "Microsoft.Windows.Explorer");
+
+    // The same value the long way round, to pin the addressing: format ID plus
+    // integer property ID, not a name.
+    let store = link.property_store().expect("a property store block");
+    let value = store
+        .get(&FMTID_APP_USER_MODEL, PID_APP_USER_MODEL_ID)
+        .expect("property 5");
+    assert_eq!(value.property_type(), propstore::vt::LPWSTR);
+    assert_eq!(
+        value.as_str().expect("a string").to_string_lossy(),
+        "Microsoft.Windows.Explorer"
+    );
+}
+
+#[test]
+fn a_property_storage_declares_its_version_and_format_id() {
+    let buf = fixture("property-store-app-id.bin");
+    let link = ShellLink::parse(&buf).expect("well formed");
+    let store = link.property_store().expect("a property store");
+
+    let storages: Vec<_> = store.storages().map(|s| s.expect("well formed")).collect();
+    assert_eq!(storages.len(), 1);
+    assert_eq!(storages[0].version, propstore::VERSION);
+    assert_eq!(
+        &store.as_bytes()[4..8],
+        b"1SPS",
+        "0x53505331 little-endian reads as \"1SPS\" on the wire"
+    );
+    assert_eq!(storages[0].format_id, FMTID_APP_USER_MODEL);
+    assert!(!storages[0].is_string_named());
+
+    let ids: Vec<_> = storages[0]
+        .values()
+        .map(|p| p.expect("well formed").name)
+        .collect();
+    assert_eq!(
+        ids,
+        vec![
+            PropertyName::Integer(2),
+            PropertyName::Integer(4),
+            PropertyName::Integer(5),
+            PropertyName::Integer(9),
+        ]
+    );
+}
+
+#[test]
+fn a_bool_property_is_a_variant_bool() {
+    let buf = fixture("property-store-app-id.bin");
+    let link = ShellLink::parse(&buf).expect("well formed");
+    let store = link.property_store().expect("a property store");
+    assert_eq!(
+        store.get(
+            &FMTID_APP_USER_MODEL,
+            propstore::PID_APP_USER_MODEL_PREVENT_PINNING
+        ),
+        Some(PropertyValue::Bool(false))
+    );
+}
+
+#[test]
+fn every_covered_vt_decodes_and_the_rest_survive_as_bytes() {
+    let buf = fixture("property-store-mixed-types.bin");
+    let link = ShellLink::parse(&buf).expect("well formed");
+    let store = link.property_store().expect("a property store");
+
+    let summary = store
+        .storages()
+        .map(|s| s.expect("well formed"))
+        .find(|s| !s.is_string_named() && s.format_id != FMTID_APP_USER_MODEL)
+        .expect("the mixed-type storage");
+
+    assert_eq!(summary.get(2), Some(PropertyValue::I4(-42)));
+    assert_eq!(summary.get(3), Some(PropertyValue::U4(0xDEAD_BEEF)));
+    assert_eq!(
+        summary.get(4),
+        Some(PropertyValue::FileTime(FileTime(130_092_000_000_000_000)))
+    );
+    let PropertyValue::Clsid(g) = summary.get(5).expect("a CLSID") else {
+        panic!("expected VT_CLSID");
+    };
+    assert_eq!(
+        g.to_braced().as_str(),
+        "{00021401-0000-0000-C000-000000000046}"
+    );
+    assert_eq!(summary.get(6), Some(PropertyValue::Bool(true)));
+    assert_eq!(summary.get(7), Some(PropertyValue::Empty));
+    assert_eq!(summary.get(8), Some(PropertyValue::Null));
+    assert_eq!(
+        summary
+            .get(9)
+            .expect("a BSTR")
+            .as_str()
+            .expect("string")
+            .to_string_lossy(),
+        "code page bytes"
+    );
+
+    // The point of the fixture: property 10 is a VT_VECTOR | VT_LPWSTR, which
+    // this codec deliberately does not decode. It must come back as bytes and
+    // it must not cost property 11.
+    let PropertyValue::Unsupported {
+        property_type,
+        data,
+    } = summary.get(10).expect("property 10")
+    else {
+        panic!("a vector type must not be decoded as something else");
+    };
+    assert_eq!(property_type, 0x101F);
+    assert!(!data.is_empty(), "the raw payload is kept");
+    assert_eq!(
+        summary.get(11),
+        Some(PropertyValue::I4(7)),
+        "an undecodable value is skipped by ValueSize, not fatal to the storage"
+    );
+}
+
+#[test]
+fn decoding_an_uncovered_vt_directly_reports_unsupported() {
+    // The iterator turns this into `PropertyValue::Unsupported`; the underlying
+    // decoder says why.
+    let mut r = rclip_core::Reader::new(&[0u8; 8]);
+    let err = PropertyValue::decode(0x101F, &mut r).expect_err("VT_VECTOR is not covered");
+    assert_eq!(err.kind, ErrorKind::Unsupported);
+}
+
+#[test]
+fn the_string_named_storage_is_the_one_with_the_documented_format_id() {
+    let buf = fixture("property-store-mixed-types.bin");
+    let link = ShellLink::parse(&buf).expect("well formed");
+    let store = link.property_store().expect("a property store");
+
+    let named = store
+        .storage(&FMTID_STRING_NAMED)
+        .expect("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}");
+    assert!(named.is_string_named());
+
+    let names: Vec<String> = named
+        .values()
+        .map(|p| match p.expect("well formed").name {
+            PropertyName::String(s) => s.to_string_lossy(),
+            PropertyName::Integer(n) => panic!("expected a string name, got {n}"),
+        })
+        .collect();
+    assert_eq!(names, vec!["MyApp.Setting", "MyApp.Count"]);
+
+    let name = "MyApp.Setting"
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect::<Vec<u8>>();
+    assert_eq!(
+        named
+            .get_named(&name)
+            .expect("by name")
+            .as_str()
+            .expect("string")
+            .to_string_lossy(),
+        "on"
+    );
+    assert!(
+        named.get(5).is_none(),
+        "integer lookup finds nothing in a string-named storage"
+    );
+}
+
+#[test]
+fn a_wrong_storage_version_is_rejected_rather_than_read_as_a_format_id() {
+    let buf = fixture("property-store-bad-version.bin");
+    // The link itself is fine — this is a property store problem, not a shell
+    // link one, which is why the fixture's sidecar says "ok".
+    let link = ShellLink::parse(&buf).expect("the link is well formed");
+    assert_eq!(link.extra_data().filter(|b| b.is_ok()).count(), 1);
+
+    let store = link.property_store().expect("a property store");
+    let err = store
+        .storages()
+        .next()
+        .expect("one attempt")
+        .expect_err("version 0x53505332 is not 0x53505331");
+    assert_eq!(err.kind, ErrorKind::BadMagic);
+    assert!(store.app_user_model_id().is_none());
+}
+
+#[test]
+fn a_value_size_below_the_minimum_ends_the_walk_instead_of_stalling() {
+    let buf = fixture("property-store-value-size-too-small.bin");
+    let link = ShellLink::parse(&buf).expect("the link is well formed");
+    let store = link.property_store().expect("a property store");
+    let storage = store
+        .storages()
+        .next()
+        .expect("one storage")
+        .expect("well formed");
+
+    let mut values = storage.values();
+    let first = values.next().expect("one good value").expect("well formed");
+    assert_eq!(first.name, PropertyName::Integer(5));
+
+    let err = values
+        .next()
+        .expect("the bad one")
+        .expect_err("a ValueSize of 8 cannot cover its own header");
+    assert_eq!(err.kind, ErrorKind::BadLength);
+    assert!(values.next().is_none(), "the walk stops after a bad frame");
+}
+
+#[test]
+fn a_property_store_walk_terminates_on_every_prefix_of_a_real_one() {
+    // Truncation at every byte boundary: no panic, no hang, and a walk that
+    // either yields values or reports a frame error.
+    let buf = fixture("property-store-mixed-types.bin");
+    let link = ShellLink::parse(&buf).expect("well formed");
+    let full = link.property_store().expect("a property store").as_bytes();
+
+    for n in 0..full.len() {
+        let store = propstore::PropertyStore::new(&full[..n]);
+        for storage in store.storages() {
+            let Ok(storage) = storage else { break };
+            for value in storage.values() {
+                if value.is_err() {
+                    break;
+                }
+            }
+        }
+        let _ = store.app_user_model_id();
+    }
+}

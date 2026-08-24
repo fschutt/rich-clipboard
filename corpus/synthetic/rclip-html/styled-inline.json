@@ -1,0 +1,7 @@
+{
+  "format": "text/html",
+  "origin": "synthetic",
+  "description": "Every inline element and style property this crate reads, in one paragraph",
+  "expect": "ok",
+  "notes": "Decodes to 'plain bold italic under struck span'. The span carries colour #FF0000, background #FFFF00, 14pt and font family 'Courier New' - the family is written with &quot; entities, which is what a serializer emits inside an already-double-quoted attribute and what a CSS splitter that treats the entity's ';' as a declaration separator gets wrong."
+}

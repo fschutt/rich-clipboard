@@ -1,0 +1,7 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "A serialized property value declaring ValueSize = 8, below the 13-byte minimum",
+  "notes": "Well-formed as a shell link, so the fixture expects \"ok\" at the gate. PropertyStorage::values yields the AppUserModelID and then ErrorKind::BadLength: a ValueSize below 13 cannot cover its own ValueSize, Id, Reserved and TypedPropertyValue header, and using it as the stride would leave the walk inside a field."
+}

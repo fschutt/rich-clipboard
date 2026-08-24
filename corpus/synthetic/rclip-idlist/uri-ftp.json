@@ -1,0 +1,7 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "A class 0x61 URI item whose data block is the >= 36 byte FTP layout",
+  "notes": "The block holds a FILETIME at block[8..16] and then three byte-counted strings: host, user and -- in the clear -- password. FtpData's Debug prints <redacted> for the last one."
+}

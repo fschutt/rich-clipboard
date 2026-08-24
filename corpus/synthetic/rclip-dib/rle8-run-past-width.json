@@ -1,0 +1,8 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "4x1 BI_RLE8 with an encoded run of six pixels in a four-pixel row",
+  "expect": "error",
+  "error_kind": "Malformed",
+  "notes": "The run is rejected before any of it is written, so a partially drawn row never reaches the caller. Spilling would write into the row above, since the rows are stored bottom-up."
+}

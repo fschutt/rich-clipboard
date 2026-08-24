@@ -1,0 +1,8 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "BI_RLE8 with a negative biHeight, i.e. a compressed top-down bitmap",
+  "expect": "error",
+  "error_kind": "Malformed",
+  "notes": "A top-down DIB cannot be compressed: the run grammar has no way to say which end it started from. Rejected at the biHeight field rather than decoded upside down."
+}

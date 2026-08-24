@@ -1,0 +1,8 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "2x2 BI_RLE8 whose delta escape moves five rows up a two-row bitmap",
+  "expect": "error",
+  "error_kind": "Malformed",
+  "notes": "dx=0, dy=5 on a bitmap two rows tall. The offsets are unsigned so the read cursor only ever moves forward, but the rows are stored bottom-up, so advancing y walks backwards through the output buffer. Must be ErrorKind::Malformed rather than a write outside the image."
+}

@@ -1,7 +1,7 @@
 # rclip-dib
 
 `CF_DIB` and `CF_DIBV5` — Windows *packed* device-independent bitmaps — decoded to RGBA8, and
-RGBA8 encoded back to `CF_DIBV5`. Packed means there is no 14-byte `BITMAPFILEHEADER`: the
+RGBA8 encoded back to either. Packed means there is no 14-byte `BITMAPFILEHEADER`: the
 clipboard payload starts at the information header, there is no `BM` magic and no explicit
 offset to the pixels, so the entire layout has to be derived from the header's own fields. That
 is the single reason a BMP crate written for `.bmp` files cannot be pointed at this data.
@@ -28,9 +28,25 @@ let mut rgba = vec![0u8; header.required_buffer_len()];  // width * height * 4
 header.decode_into(payload, &mut rgba, AlphaMode::Straight)?;
 ```
 
-`decode_into` writes into a caller-provided buffer and allocates nothing. `decode` and
-`encode_v5`, which return owned buffers, sit behind the `alloc` feature; `encode_v5_into` is the
-borrowed-buffer encoder and is available without it.
+`decode_into` writes into a caller-provided buffer and allocates nothing. `decode`, `encode_v5`
+and `encode_dib`, which return owned buffers, sit behind the `alloc` feature; `encode_v5_into`
+and `encode_dib_into` are the borrowed-buffer encoders and are available without it.
+
+Two encoders, one per clipboard format:
+
+| Function | Writes | Alpha |
+|---|---|---|
+| `encode_v5` | 124-byte `BITMAPV5HEADER`, 32 bpp, `BI_BITFIELDS`, explicit `bV5AlphaMask`, sRGB | carried; `AlphaMode` says straight or premultiplied on the wire |
+| `encode_dib` | 40-byte `BITMAPINFOHEADER`, 24 bpp, `BI_RGB` | **cannot be carried**; `Flatten` says discard it or composite over a background |
+
+`CF_DIB` is 24 bpp and not 32 on purpose. At 32 bpp under a `BITMAPINFOHEADER` the fourth byte of
+every pixel is undefined, and readers disagree about it in both directions — this crate's own
+decoder treats an all-non-zero fourth byte as alpha, and plenty of others treat it as alpha
+unconditionally, which turns a `0x00` filler into a fully transparent image. 24 bpp has no fourth
+byte to disagree about, and it is what the older consumers `CF_DIB` exists for actually expect.
+The 4-byte row pad that 24 bpp brings back is written explicitly rather than skipped: `dst` is
+the caller's buffer, and leaving three bytes of it inside a clipboard payload would publish
+whatever they held.
 
 ## The alpha policy
 
@@ -112,21 +128,57 @@ Verdict: written from scratch against the Microsoft docs. The reusable part of t
 tenth of the crate, and none of the candidates handled the alpha question, which is the part that
 actually breaks in production.
 
+## Run-length encoding
+
+`BI_RLE4` and `BI_RLE8` decode. Nothing on a modern clipboard writes them, but the grammar is
+four cases wide and three of those are escapes, so every one of them is somewhere a hostile
+stream tries to leave the bitmap:
+
+| Case | Bounded by |
+|---|---|
+| Termination | Each loop iteration consumes at least the two bytes it reads, and `Reader` only moves forward — at most `len / 2` iterations whatever the bytes say |
+| Encoded run | Checked against the row width *and* the row count before any of it is written, so an over-long run never half-draws |
+| Absolute run | Literals come through `Reader::take`, so a run claiming more bytes than remain is `UnexpectedEof`, not a read past the end |
+| Delta | `dx`/`dy` are unsigned, so the *read* cursor cannot rewind — but rows are bottom-up, so advancing `y` walks backwards through the output. Both edges checked, and the addition itself checked |
+| Palette index | The same out-of-range check the packed 1/4/8-bpp paths use |
+| `biSizeImage` | The only statement of the stream's length. Zero means "the rest of the payload"; a value that does not fit is a truncated payload and is `UnexpectedEof`, not something to clamp |
+
+Two structural rules are enforced at parse time rather than discovered mid-stream: `BI_RLE8`
+requires 8 bpp and `BI_RLE4` requires 4 bpp (the grammars walk a different number of pixels per
+byte, so reading one as the other desynchronises immediately), and a compressed bitmap cannot be
+top-down (`biHeight` must be positive — the run grammar has no way to say which end it started
+from).
+
+Pixels no run covers decode to **transparent black**, not to palette entry 0. RLE is the one DIB
+encoding where "not covered" is expressible — a delta or an early end-of-bitmap leaves a hole,
+and GDI fills it with whatever the destination already held. There is no such thing here, so a
+hole is reported as a hole rather than as a colour a run could have written.
+
+## Colour management: reported, never applied
+
+`bV4Endpoints`/`bV5Endpoints` (bytes 60..96, a `CIEXYZTRIPLE` in `FXPT2DOT30`) and the three
+gamma `DWORD`s (96..108, unsigned 16.16) are parsed and exposed via `endpoints()` and `gamma()`,
+alongside `color_space()` and `is_calibrated()`. **No transform is performed.** A clipboard
+decoder that half-applies a colour transform produces pixels that are wrong in a way nothing
+downstream can detect or undo; passing them through unchanged leaves the caller with an
+ICC-shaped problem it can still solve. The two are only *meaningful* when `bV5CSType` is
+`LCS_CALIBRATED_RGB` — every other value names a colour space that supersedes them.
+
 ## Not implemented
 
-- `BI_RLE4` / `BI_RLE8` — `// TODO(phase-1)` in `header.rs`. Reported as `Unsupported`. No modern
-  clipboard producer writes RLE; if a real capture ever shows one, it lands here.
 - `BI_JPEG` / `BI_PNG` — permanently out of scope. These are an embedded JPEG or PNG stream in a
   DIB wrapper; `PLAN.md` §4.4 delegates those formats to `image` or azul's existing decoders.
   Reported as `Unsupported`.
 - 12-byte `BITMAPCOREHEADER` — 16-bit dimensions and a 3-byte `RGBTRIPLE` palette, an entirely
   different layout. Rejected as `Unsupported` rather than misread as a 40-byte header.
-- ICC profiles and colour management — `bV5CSType` is reported via `color_space()`, but the
-  endpoints, gamma and `bV5ProfileData` are not extracted and no transform is applied. Pixels
-  come out in whatever space they went in. `// TODO(phase-2)` in `header.rs`.
-- The encoder emits exactly one shape: 32-bpp `BI_BITFIELDS` `BITMAPV5HEADER`, bottom-up, sRGB.
-  No palettised, 16-bpp or 24-bpp output, and no `CF_DIB` (V1) output — a producer has no reason
-  to write a format that cannot carry alpha.
+- The V5 ICC profile — `bV5ProfileData` (112) and `bV5ProfileSize` (116) are read past but not
+  reported. It is a byte *range elsewhere in the payload* rather than a value, and resolving it
+  means handing a caller an offset that came off the wire. `// TODO(phase-2)` in `header.rs`.
+- The encoders emit exactly one shape each, because each is the only shape its format can carry
+  honestly: `encode_v5` writes 32-bpp `BI_BITFIELDS` `BITMAPV5HEADER`, bottom-up, sRGB;
+  `encode_dib` writes 24-bpp `BI_RGB` `BITMAPINFOHEADER`, bottom-up. No palettised or 16-bpp
+  output, and no RLE output — a producer has no reason to compress a clipboard payload into a
+  format whose decoders are the ones most likely to be wrong.
 - `CF_BITMAP` is a device-dependent `HBITMAP` *handle*, not a byte format, so it is not something
   a parser crate can own.
 

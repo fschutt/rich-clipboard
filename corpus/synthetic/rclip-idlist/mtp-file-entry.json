@@ -1,0 +1,7 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "MTP file entry, recognised by signature 0x07192006 at abID[4..8]",
+  "notes": "Two FILETIMEs at abID[24..32] and abID[32..40], a WPD_CONTENT_TYPE_* GUID at abID[40..56], then three character-counted UTF-16 strings."
+}

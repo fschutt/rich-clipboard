@@ -1,0 +1,7 @@
+{
+  "format": "text/html",
+  "origin": "synthetic",
+  "description": "The pre-CSS presentational attributes that mail clients still emit: <font face/color/size> and bgcolor",
+  "expect": "ok",
+  "notes": "Decodes to 'big serif\\tsmall'. size=5 is 24px = 18pt on the legacy 1..7 scale; size=-1 is relative to 3, so size 2 = 13px = 9.75pt. Cells are separated by a tab rather than a newline, because a table pasted one cell per line reads worse than the original."
+}

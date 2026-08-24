@@ -1,0 +1,8 @@
+{
+  "format": "webloc",
+  "origin": "synthetic",
+  "description": "A well-formed resource fork holding a TEXT resource and no url resource",
+  "expect": "error",
+  "error_kind": "Malformed",
+  "notes": "Built with Apple's Rez(1) from a single TEXT resource reading 'not a location'. Expected: ErrorKind::Malformed - the same answer xml-no-url-key.bin gets, and for the same reason: the url resource is the whole content of the format, so a fork without one is not a partially readable location file, it is a different document that happens to be a resource fork. Falling back to the TEXT resource would be a guess; Finder does write the URL there as well, but TEXT means 'some text' and nothing more."
+}

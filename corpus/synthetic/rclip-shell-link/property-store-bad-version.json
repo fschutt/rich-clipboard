@@ -1,0 +1,7 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "A property storage whose Version is 0x53505332 instead of 0x53505331",
+  "notes": "The shell link itself is well formed, so ShellLink::parse and the ExtraData walk both succeed -- which is why this fixture expects \"ok\". Walking the store is what fails: PropertyStore::storages yields ErrorKind::BadMagic. Version is the only hard check in the property store, and it is there so a mis-sized block cannot be read as a storage with sixteen bytes of something else for a format ID."
+}

@@ -729,3 +729,284 @@ fn an_undefined_byte_is_reported_and_iteration_continues() {
     assert_eq!(s.to_string_lossy_with(Encoding::Windows1252), "a\u{FFFD}z");
     assert!(s.to_string_with(Encoding::Windows1252).is_err());
 }
+
+// ------------------------------------------------- signature-based item types
+//
+// Everything below is Phase 3: items identified by a signature inside the body
+// rather than by the class byte, plus the three smaller gaps Phase 0 left.
+
+fn only_item(buf: &[u8]) -> ShellItem<'_> {
+    let mut list = ItemIdList::new(buf);
+    let item = list.next().expect("one item").expect("well formed");
+    assert!(list.next().is_none(), "the fixture holds exactly one item");
+    item.parse()
+}
+
+#[test]
+fn a_control_panel_item_decodes_to_a_guid_and_a_name() {
+    let buf = fixture("control-panel-item.bin");
+    let ShellItem::ControlPanel(cp) = only_item(&buf) else {
+        panic!("expected a control panel item");
+    };
+    assert_eq!(cp.class, 0x71);
+    assert_eq!(
+        cp.identifier.to_braced().as_str(),
+        "{C555438B-3C23-4769-A71F-B6D3D9B6053A}"
+    );
+    assert_eq!(cp.name(), Some("Display"));
+}
+
+#[test]
+fn a_control_panel_guid_is_not_looked_up_in_the_shell_folder_table() {
+    // The two namespaces overlap and disagree: this GUID is `Fonts` as a shell
+    // folder and `Font Folder` as a control panel item. Reading one table for
+    // the other is not merely incomplete, it is wrong.
+    let g = Guid::from_bytes(
+        *Guid::from_slice(&[
+            0x80, 0xB3, 0x84, 0xBD, 0xA2, 0x8C, 0x69, 0x10, 0xAB, 0x1D, 0x08, 0x00, 0x09, 0x48,
+            0xF5, 0x34,
+        ])
+        .expect("16 bytes")
+        .as_bytes(),
+    );
+    assert_eq!(g.well_known_name(), Some("Fonts"));
+    assert_eq!(g.control_panel_name(), Some("Font Folder"));
+}
+
+#[test]
+fn an_mtp_volume_is_recognised_by_its_signature_not_its_class_byte() {
+    let buf = fixture("mtp-volume.bin");
+    let item = only_item(&buf);
+    assert_eq!(
+        item.class(),
+        Some(0x00),
+        "the class byte says nothing; the signature is what identifies it"
+    );
+    let ShellItem::MtpVolume(v) = item else {
+        panic!("expected an MTP volume, got {item:?}");
+    };
+    assert_eq!(
+        v.name.expect("name").to_string_lossy(),
+        "Internal storage",
+        "the length field counts characters including the terminator"
+    );
+    assert_eq!(v.identifier.expect("id").to_string_lossy(), "s10001");
+    assert_eq!(v.file_system.expect("fs").to_string_lossy(), "FAT32");
+    assert_eq!(
+        item.display_name().expect("a name").to_string_lossy(),
+        "Internal storage"
+    );
+}
+
+#[test]
+fn an_mtp_file_entry_carries_two_filetimes_and_a_content_type() {
+    let buf = fixture("mtp-file-entry.bin");
+    let ShellItem::MtpFileEntry(f) = only_item(&buf) else {
+        panic!("expected an MTP file entry");
+    };
+    assert_eq!(f.modified, 130_092_000_000_000_000);
+    assert_eq!(f.created, 130_091_000_000_000_000);
+    assert_eq!(
+        f.content_type.expect("guid").to_braced().as_str(),
+        "{27E2E392-A111-48E0-AB0C-E17705A05F85}"
+    );
+    assert_eq!(f.name.expect("name").to_string_lossy(), "Photos");
+    assert_eq!(f.identifier.expect("id").to_string_lossy(), "o1234");
+}
+
+#[test]
+fn a_string_length_of_four_billion_characters_yields_no_name_and_no_panic() {
+    // The one that has to hold: `chars * 2` overflows a 32-bit usize, and even
+    // where it does not the slice runs past the end of a sixty-byte item.
+    let buf = fixture("mtp-volume-length-bomb.bin");
+    let item = only_item(&buf);
+    let ShellItem::MtpVolume(v) = item else {
+        panic!("expected an MTP volume");
+    };
+    assert!(
+        v.name.is_none(),
+        "a length that cannot fit yields no string"
+    );
+    assert!(v.identifier.is_none());
+    assert!(v.file_system.is_none());
+    assert!(item.display_name().is_none());
+    assert_eq!(
+        item.as_bytes().len() + 2,
+        buf.len() - 2,
+        "the raw bytes survive whatever the length fields claimed"
+    );
+}
+
+#[test]
+fn a_users_property_view_exposes_its_known_folder_and_its_property_store() {
+    let buf = fixture("users-property-view.bin");
+    let item = only_item(&buf);
+    let ShellItem::UsersPropertyView(v) = item else {
+        panic!("expected a users property view, got {item:?}");
+    };
+    assert_eq!(v.signature, 0x23FE_BBEE);
+    assert_eq!(v.identifier.len(), 16);
+    assert_eq!(
+        v.known_folder_id.expect("guid").well_known_name(),
+        Some("Users Files")
+    );
+    assert_eq!(
+        item.display_name().expect("a name").to_string_lossy(),
+        "Users Files"
+    );
+    // Kept raw. The structure is MS-PROPSTORE, the same as a .lnk property
+    // store block, but this crate does not depend on the crate that decodes it.
+    assert!(!v.property_store.is_empty());
+    assert_eq!(
+        &v.property_store[4..8],
+        b"1SPS",
+        "a serialized property storage, version first"
+    );
+}
+
+#[test]
+fn a_compressed_folder_is_recognised_by_the_shape_of_its_timestamp() {
+    let buf = fixture("compressed-folder-win10.bin");
+    let item = only_item(&buf);
+    let ShellItem::CompressedFolder(c) = item else {
+        panic!("expected a compressed folder, got {item:?}");
+    };
+    assert_eq!(c.variant, rclip_idlist::CompressedFolderVariant::Windows10);
+    assert_eq!(c.uncompressed_size, Some(1_048_576));
+    assert_eq!(c.compressed_size, Some(262_144));
+    assert_eq!(c.compression_method, Some(8), "DEFLATE");
+    assert_eq!(c.crc32, Some(0x1234_ABCD));
+    assert_eq!(
+        c.name.expect("name").to_string_lossy(),
+        "docs/report.pdf",
+        "this length EXCLUDES the terminator, unlike the MTP ones"
+    );
+    assert_eq!(c.name2.expect("name2").to_string_lossy(), "docs");
+}
+
+#[test]
+fn a_delegate_folder_names_its_extension_and_unwraps_one_level() {
+    let buf = fixture("delegate-folder.bin");
+    let item = only_item(&buf);
+    let ShellItem::DelegateFolder(d) = item else {
+        panic!("expected a delegate folder, got {item:?}");
+    };
+    assert_eq!(
+        d.folder_id.well_known_name(),
+        Some("Users Files delegate folder")
+    );
+    let inner = d.inner_item();
+    let ShellItem::RootFolder(r) = inner else {
+        panic!("expected the inner item to be a root folder, got {inner:?}");
+    };
+    assert_eq!(r.guid.well_known_name(), Some("My Computer"));
+    // A wrapper has no name of its own; it borrows the one it wraps.
+    assert_eq!(
+        item.display_name().expect("a name").to_string_lossy(),
+        "My Computer"
+    );
+}
+
+#[test]
+fn unwrapping_a_delegate_folder_never_re_enters_the_delegate_path() {
+    // A body that would match the delegate probe again if it were re-run. The
+    // guarantee is structural: `inner_item` goes through `parse_no_delegate`,
+    // so no PIDL can drive this into recursion however it is shaped.
+    let buf = fixture("delegate-folder.bin");
+    let ShellItem::DelegateFolder(d) = only_item(&buf) else {
+        panic!("expected a delegate folder");
+    };
+    let nested = ShellItem::parse_no_delegate(d.raw);
+    assert!(
+        !matches!(nested, ShellItem::DelegateFolder(_)),
+        "parse_no_delegate must not produce a delegate folder"
+    );
+}
+
+#[test]
+fn an_ftp_uri_item_decodes_its_data_block() {
+    let buf = fixture("uri-ftp.bin");
+    let ShellItem::Uri(u) = only_item(&buf) else {
+        panic!("expected a URI item");
+    };
+    assert_eq!(
+        u.uri.expect("uri").to_string_lossy(),
+        "ftp://ftp.example.com/pub/"
+    );
+    let ftp = u.ftp.expect("a >= 36 byte data block is the FTP layout");
+    assert_eq!(ftp.timestamp, 130_092_000_000_000_000);
+    assert_eq!(ftp.host.expect("host").to_string_lossy(), "ftp.example.com");
+    assert_eq!(ftp.user.expect("user").to_string_lossy(), "anonymous");
+    assert_eq!(
+        ftp.password.expect("password").to_string_lossy(),
+        "guest@example.com"
+    );
+}
+
+#[test]
+fn the_ftp_password_is_kept_out_of_debug_output() {
+    let buf = fixture("uri-ftp.bin");
+    let ShellItem::Uri(u) = only_item(&buf) else {
+        panic!("expected a URI item");
+    };
+    let rendered = format!("{:?}", u.ftp.expect("ftp block"));
+    assert!(
+        !rendered.contains("guest@example.com"),
+        "Debug must not print the password: {rendered}"
+    );
+    assert!(rendered.contains("<redacted>"));
+    // A courtesy against accidental logging, not a boundary: the field itself
+    // and the raw block both still have the bytes.
+    assert!(u.data.windows(5).any(|w| w == b"guest"));
+}
+
+#[test]
+fn a_short_uri_data_block_is_not_read_as_the_ftp_layout() {
+    // 8 bytes of block: below the 36-byte FTP header, so guessing at it would
+    // read the URI string as a host name.
+    let body = [
+        &[0x61u8, 0x00, 0x08, 0x00][..],
+        &[0u8; 8][..],
+        b"http://example.com/\0",
+    ]
+    .concat();
+    let ShellItem::Uri(u) = ShellItem::parse(&body) else {
+        panic!("expected a URI item");
+    };
+    assert!(u.ftp.is_none());
+    assert_eq!(u.uri.expect("uri").to_string_lossy(), "http://example.com/");
+}
+
+#[test]
+fn a_pre_xp_file_entry_carries_its_short_name_after_the_long_one() {
+    let buf = fixture("file-entry-pre-xp.bin");
+    let ShellItem::FileEntry(f) = only_item(&buf) else {
+        panic!("expected a file entry");
+    };
+    assert!(f.is_pre_xp, "no extension block follows the primary name");
+    assert_eq!(f.primary_name.to_string_lossy(), "Long Name.txt");
+    assert_eq!(
+        f.secondary_name.expect("8.3 name").to_string_lossy(),
+        "LONGNA~1.TXT"
+    );
+    assert!(
+        f.extension.is_none(),
+        "a pre-XP item has no extension blocks; searching for one would read \
+         the secondary name's last two bytes as an offset"
+    );
+    assert!(f.long_name.is_none());
+}
+
+#[test]
+fn an_xp_file_entry_is_not_mistaken_for_a_pre_xp_one() {
+    // The other side of the look-ahead: this fixture has a real 0xBEEF0004
+    // block, so the u16 after the primary name is a plausible block size.
+    let buf = fixture("file-entry-beef0004-v3.bin");
+    let ShellItem::FileEntry(f) = only_item(&buf) else {
+        panic!("expected a file entry");
+    };
+    assert!(!f.is_pre_xp);
+    assert!(f.secondary_name.is_none());
+    assert!(f.extension.is_some());
+    assert!(f.long_name.is_some());
+}

@@ -1,0 +1,7 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "An entry inside a zip archive, Windows 10 compressed folder layout",
+  "notes": "Recognised by punctuation, not by a signature: libfwsi tests for '/' at abID[38] and abID[44], two spaces at abID[54] and abID[56], ':' at abID[62] and abID[68], and a NUL at abID[74] -- i.e. the shape of 'mm/dd/yyyy  HH:MM:SS' as UTF-16. The name lengths here EXCLUDE the terminator, the opposite of the MTP items."
+}

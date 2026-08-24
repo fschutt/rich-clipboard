@@ -1,8 +1,11 @@
-//! One URI from a list, and the percent-encoding around it.
+//! One URI from a list, and the percent-encoding around it, both directions.
 //!
 //! Percent-*validation* and iteration are `no_std` with no allocator: a
 //! decoded URI is shorter than the encoded one but it is still a new string,
-//! so decoding lives behind the `alloc` feature and everything else does not.
+//! so producing one lives behind the `alloc` feature and everything else does
+//! not. The encoder is the same shape — [`percent_encode`] is an iterator of
+//! ASCII bytes that also implements [`Display`](core::fmt::Display), so a
+//! `no_std` caller can write straight into a `fmt::Write` and never allocate.
 
 use rclip_core::{Error, ErrorKind, Result};
 
@@ -122,6 +125,179 @@ impl<'a> Uri<'a> {
     }
 }
 
+/// Which bytes a percent-encoder may leave alone.
+///
+/// Getting this set wrong is the whole difficulty, and it breaks in both
+/// directions. **Under-encoding** loses data: an unescaped `#` in a filename
+/// turns the rest of the path into a URI fragment, so `notes#2.txt` arrives as
+/// `notes`. **Over-encoding** breaks interoperation: `%2F` is not a path
+/// separator, so escaping `/` turns one path into one long segment, and readers
+/// that compare URIs textually — RFC 3986 §6.2.2.2 is explicit that a
+/// percent-encoded *reserved* character is not equivalent to its literal form —
+/// stop matching URIs they produced themselves.
+///
+/// The sets below are the RFC 3986 productions, not an invented compromise.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum EncodeSet {
+    /// A whole `path` inside a `file:` URI: `pchar` plus `/`.
+    ///
+    /// `pchar = unreserved / pct-encoded / sub-delims / ":" / "@"` (§3.3), and
+    /// `/` is the segment separator, so all of
+    /// `A-Za-z0-9-._~!$&'()*+,;=:@/` stay literal.
+    ///
+    /// This is byte-for-byte GLib's `G_URI_RESERVED_CHARS_ALLOWED_IN_PATH`,
+    /// which is what `g_filename_to_uri` escapes with — so a URI produced here
+    /// is textually identical to the one Nautilus would have produced for the
+    /// same path, which is what makes a comparison on the receiving side work.
+    Path,
+    /// One path *segment*: `pchar` only.
+    ///
+    /// `/` is escaped, so a filename that contains a slash cannot silently
+    /// become two path components. Use this when encoding a single name;
+    /// use [`EncodeSet::Path`] when encoding a path that already has structure.
+    Segment,
+    /// RFC 3986 `unreserved` only: `A-Za-z0-9-._~`.
+    ///
+    /// Escapes everything else, including the sub-delims and `/`. Maximally
+    /// conservative and therefore *not* what a `file:` path wants — it is here
+    /// for the places a URI component has to survive being embedded in
+    /// something else.
+    Unreserved,
+}
+
+impl EncodeSet {
+    /// Whether `b` may appear literally.
+    #[must_use]
+    pub const fn allows(self, b: u8) -> bool {
+        // `%` is never in any set: a literal `%` in a name must become `%25` or
+        // the next reader takes the two bytes after it for an escape. It is not
+        // in `unreserved` or `sub-delims`, so this falls out of the productions
+        // rather than being a special case — but it is the one byte where
+        // getting it wrong silently corrupts a filename, so it is worth naming.
+        if b.is_ascii_alphanumeric() {
+            return true;
+        }
+        match b {
+            // unreserved
+            b'-' | b'.' | b'_' | b'~' => true,
+            // sub-delims, plus the two gen-delims `pchar` admits
+            b'!' | b'$' | b'&' | b'\'' | b'(' | b')' | b'*' | b'+' | b',' | b';' | b'=' | b':'
+            | b'@' => !matches!(self, Self::Unreserved),
+            b'/' => matches!(self, Self::Path),
+            _ => false,
+        }
+    }
+}
+
+/// Percent-encode `bytes`, leaving the members of `set` literal.
+///
+/// Takes bytes rather than a `&str` on purpose, and for the same reason
+/// [`Uri::percent_decode`] yields them: a POSIX path is a byte string and is not
+/// required to be UTF-8, and the paths that are not are exactly the ones a
+/// caller most needs to move rather than reject.
+///
+/// The result is always ASCII, so it can be written straight into a `str` or a
+/// `fmt::Write` — [`PercentEncode`] implements
+/// [`Display`](core::fmt::Display) for that, and iterating it yields the
+/// encoded bytes one at a time without allocating.
+///
+/// ```
+/// use rclip_uri_list::uri::{percent_encode, EncodeSet};
+///
+/// // A space, a `#` and a literal `%`, all of which change meaning if left.
+/// let encoded = percent_encode(b"/tmp/a file#2 100%.txt", EncodeSet::Path);
+/// assert_eq!(encoded.to_string(), "/tmp/a%20file%232%20100%25.txt");
+/// ```
+#[must_use]
+pub const fn percent_encode(bytes: &[u8], set: EncodeSet) -> PercentEncode<'_> {
+    PercentEncode {
+        rest: bytes,
+        set,
+        pending: 0,
+        byte: 0,
+    }
+}
+
+/// How many bytes [`percent_encode`] will produce.
+///
+/// For a caller writing into a fixed buffer with no allocator. Cannot overflow
+/// in practice — the answer is at most three times the input — but it saturates
+/// rather than wrapping if it ever could.
+#[must_use]
+pub fn encoded_len(bytes: &[u8], set: EncodeSet) -> usize {
+    bytes.iter().fold(0usize, |acc, &b| {
+        acc.saturating_add(if set.allows(b) { 1 } else { 3 })
+    })
+}
+
+/// Iterator over the percent-encoded bytes of a byte string.
+///
+/// Every byte it yields is ASCII. Returned by [`percent_encode`].
+#[derive(Debug, Copy, Clone)]
+pub struct PercentEncode<'a> {
+    rest: &'a [u8],
+    set: EncodeSet,
+    /// `2` = the two hex digits of `byte` are still owed, `1` = the low one is,
+    /// `0` = read the next input byte.
+    pending: u8,
+    byte: u8,
+}
+
+const HEX_UPPER: &[u8; 16] = b"0123456789ABCDEF";
+
+impl Iterator for PercentEncode<'_> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<u8> {
+        // RFC 3986 §2.1: "should use uppercase letters for the digits". GLib,
+        // Qt and Chromium all do, and a lowercase escape is a textual mismatch
+        // for a reader that compares URIs without normalising them first.
+        match self.pending {
+            2 => {
+                self.pending = 1;
+                return Some(HEX_UPPER[usize::from(self.byte >> 4)]);
+            }
+            1 => {
+                self.pending = 0;
+                return Some(HEX_UPPER[usize::from(self.byte & 0x0F)]);
+            }
+            _ => {}
+        }
+        let (&b, tail) = self.rest.split_first()?;
+        self.rest = tail;
+        if self.set.allows(b) {
+            Some(b)
+        } else {
+            self.byte = b;
+            self.pending = 2;
+            Some(b'%')
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let n = self.rest.len();
+        let owed = usize::from(self.pending);
+        (n + owed, n.checked_mul(3).map(|m| m + owed))
+    }
+}
+
+impl core::iter::FusedIterator for PercentEncode<'_> {}
+
+impl core::fmt::Display for PercentEncode<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        use core::fmt::Write as _;
+
+        // Every yielded byte is ASCII by construction — the allowed sets are
+        // ASCII and an escape is `%` plus two hex digits — so the cast is a
+        // widening of a code point below 0x80 and never a mojibake.
+        for b in *self {
+            f.write_char(char::from(b))?;
+        }
+        Ok(())
+    }
+}
+
 /// A `file:` URI split into its parts.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct FileUri<'a> {
@@ -203,7 +379,21 @@ mod with_alloc {
     use alloc::{string::String, vec::Vec};
     use rclip_core::{Error, ErrorKind, Result};
 
-    use super::Uri;
+    use super::{percent_encode, EncodeSet, Uri};
+
+    /// [`percent_encode`] into an owned `String`.
+    ///
+    /// The borrowed form implements `Display`, so this is only needed when the
+    /// result has to outlive the input or be handed on as a `String`.
+    #[must_use]
+    pub fn percent_encode_to_string(bytes: &[u8], set: EncodeSet) -> String {
+        let mut out = String::with_capacity(super::encoded_len(bytes, set));
+        for b in percent_encode(bytes, set) {
+            // ASCII by construction; see the `Display` impl.
+            out.push(char::from(b));
+        }
+        out
+    }
 
     impl Uri<'_> {
         /// Percent-decode into owned bytes.
@@ -240,3 +430,6 @@ mod with_alloc {
         }
     }
 }
+
+#[cfg(feature = "alloc")]
+pub use with_alloc::percent_encode_to_string;

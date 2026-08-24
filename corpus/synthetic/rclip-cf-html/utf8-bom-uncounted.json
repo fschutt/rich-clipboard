@@ -1,0 +1,7 @@
+{
+  "format": "CF_HTML",
+  "origin": "synthetic",
+  "description": "CF_HTML behind a UTF-8 BOM whose offsets were computed as if the BOM were not there",
+  "expect": "ok",
+  "notes": "Every offset is three bytes short. StartHTML lands inside the header and is clamped up to the end of it, and the fragment comes from the <!--StartFragment--> comments, which move with the content \u2014 so both survive. What does not is the tail of the context: EndHTML under-reports by three and the last three bytes of </html> are cut. That is the documented cost of reading the offsets as BOM-inclusive, and it is why bom_len is exposed."
+}

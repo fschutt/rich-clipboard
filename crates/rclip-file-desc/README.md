@@ -98,15 +98,43 @@ of the caller's buffer; the serializer is behind the `alloc` feature.
 Searching crates.io for `filegroupdescriptor` returns nothing; `filedescriptor` returns the
 unrelated file-handle wrapper crate.
 
+## Both spellings
+
+| Clipboard format | Type | Descriptor | Name field |
+|---|---|---|---|
+| `"FileGroupDescriptorW"` (`CFSTR_FILEDESCRIPTORW`) | `FileGroupDescriptor` | 592 bytes | `WCHAR cFileName[260]`, UTF-16LE |
+| `"FileGroupDescriptor"` (`CFSTR_FILEDESCRIPTORA`) | `FileGroupDescriptorA` | 332 bytes | `CHAR cFileName[260]`, writer's ANSI code page |
+
+The two differ only in the width of that last field; the 72-byte prefix — flags, CLSID, icon size
+and position, attributes, three `FILETIME`s and the two size `DWORD`s — is byte-for-byte
+identical, and both parsers read it through the same code so the offset table cannot drift
+between them.
+
+**There is no sniffing between the two.** Which reader to use comes from the *format name* the
+payload was offered under. A length test looks tempting (`4 + n*592` versus `4 + n*332`) and is
+wrong exactly when it matters: trailing bytes past the last descriptor are legal, because the
+payload arrives in an `HGLOBAL` and `GlobalAlloc` rounds capacity up — so a wide payload also
+"fits" the ANSI reading and comes back with a name that is UTF-16 read as bytes. A test pins that
+behaviour rather than papering over it.
+
+The ANSI name is in the code page of the machine that *wrote* the payload, and that number is not
+in the struct. `FileDescriptorA::file_name_ansi` therefore hands back raw bytes and refuses to
+guess. The default-off `codepage` feature adds `chars_with`, `file_name_with`,
+`file_name_lossy_with` and `BuilderA::push_str_with`, all of which take an `rclip_codepage::Encoding`
+as a parameter — the same shape `rclip-dropfiles` uses for `CF_HDROP`'s `fWide == 0`. Note that
+the 260 is a *byte* count there, so the length limit is checked after encoding, not before: in a
+double-byte page one character can cost two of them.
+
+`FD_UNICODE` on an ANSI descriptor is a contradiction — the flag claims the name is Unicode and
+the field is 260 single bytes. It is reported through `claims_unicode()` rather than rejected: a
+producer that sets it is confused, and saying so is more useful to a caller weighing how much to
+trust the payload than a refusal to parse.
+
 ## Not implemented (Phase 0)
 
 - **`CFSTR_FILECONTENTS`.** The bytes of each promised file arrive as a separate format, one per
   descriptor, keyed by `FORMATETC::lindex` and usually delivered as an `IStream`. That is
   transport, not a struct, and belongs in the platform backend. Marked
-  `// TODO(phase-1):` in the source.
-- **`CFSTR_FILEDESCRIPTOR` (the ANSI `FILEGROUPDESCRIPTORA`).** Same layout with a
-  `CHAR cFileName[260]`, so 332 bytes per descriptor, and the same unknowable-codepage problem
-  as `CF_HDROP`'s `fWide == 0`. Deferred until there is a real capture that needs it;
   `// TODO(phase-1):` in the source.
 - **`dwFileAttributes` interpretation.** The value is passed through verbatim against a handful
   of named `FILE_ATTRIBUTE_*` constants. The full set belongs to `GetFileAttributes` and is not

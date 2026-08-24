@@ -1,0 +1,7 @@
+{
+  "format": "text/html",
+  "origin": "synthetic",
+  "description": "Whitespace collapsing, and the one element where it does not happen",
+  "expect": "ok",
+  "notes": "Decodes to 'collapsed text\\n  two spaces\\n\\tand a tab\\nafter'. Without collapsing, a fragment copied out of a browser pastes with a newline and four spaces between every two words, because the serializer pretty-prints it."
+}

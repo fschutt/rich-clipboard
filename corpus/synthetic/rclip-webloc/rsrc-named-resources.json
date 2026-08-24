@@ -1,0 +1,7 @@
+{
+  "format": "webloc",
+  "origin": "synthetic",
+  "description": "A legacy resource-fork internet location file: an empty data fork, a url resource holding the URL, and a second named resource so the name list is exercised",
+  "expect": "ok",
+  "notes": "Not hand-assembled: built with Apple's own Rez(1) from two `data` statements, then the ..namedfork/rsrc stream copied out, so the byte layout is the Resource Manager's rather than this repository's reading of it. The real capture is corpus/macos/finder/webloc-resource-fork.bin; this exists for the two things that capture does not have. Both resources are named (Finder writes none), which is the only fixture that reaches the map's name list and its Pascal strings, and the TEXT resource's ID is -16000, which is the only one that proves the resource ID is read as a signed i16 rather than a u16. The url resource is ID 128 and holds https://example.com/legacy. The file Rez wrote has a zero-length data fork - the pre-OS X form exactly, where the plist does not exist and the fork is the whole file."
+}

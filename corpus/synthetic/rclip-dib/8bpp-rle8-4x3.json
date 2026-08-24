@@ -1,0 +1,7 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "4x3 8bpp BI_RLE8 exercising every run type: encoded, absolute, delta, end-of-line, end-of-bitmap",
+  "expect": "ok",
+  "notes": "Bottom-up, so the first stream row is the bottom image row. The delta on the last row skips two pixels that no run ever covers; those decode to transparent black, not to palette entry 0. The absolute run of 3 carries a WORD pad byte that must be consumed and not read as a count."
+}

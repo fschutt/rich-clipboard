@@ -11,13 +11,23 @@
 //! Sniff on the first eight bytes: `bplist00` means binary, a `<` after
 //! optional whitespace and BOM means XML.
 //!
-//! There is a third, older form: a file with an **empty data fork** whose
-//! resource fork holds `url ` and `drag` resources. Pre-OS X internet location
-//! files were written that way, and Finder still writes those resources
-//! alongside the plist today — the capture in
-//! `corpus/synthetic/rclip-webloc/finder-created.bin` has both. It is out of
-//! scope for phase 0 and would need a resource-fork reader, which is a format
-//! of its own.
+//! - **A resource fork**, holding a `url ` resource. Pre-OS X internet location
+//!   files had an empty data fork and lived entirely in this form, and Finder
+//!   still writes those resources alongside the plist today: the capture in
+//!   `corpus/synthetic/rclip-webloc/finder-created.bin` is the data fork of a
+//!   file whose resource fork is `corpus/macos/finder/webloc-resource-fork.bin`.
+//!   [`rsrc`] reads it.
+//!
+//! A resource fork is a separate stream and does not travel in the file's
+//! bytes — on macOS it is `<file>/..namedfork/rsrc`, in an archive it is an
+//! AppleDouble sidecar, and on the clipboard it does not travel at all.
+//! [`Webloc::parse`] takes whichever stream you hand it and works out which of
+//! the three it is; see [`Webloc::detect`].
+//!
+//! The other thing that marks such a file is its `com.apple.FinderInfo`
+//! extended attribute, whose four-character type is `il` plus two characters
+//! for the scheme and whose creator is `MACS`. That is not in either fork
+//! either; [`is_internet_location_finder_info`] checks it when a caller has it.
 //!
 //! # Strings come back as [`Text`], not `&str`
 //!
@@ -54,18 +64,55 @@
 extern crate alloc;
 
 pub mod bplist;
+pub mod rsrc;
 mod text;
 pub mod xml;
 
 use rclip_core::{Error, ErrorKind, Result};
 
 pub use bplist::BinaryPlist;
+pub use rsrc::{Resource, ResourceFork, ResourceType};
 pub use text::{Chars, Text};
 
 /// The dictionary key that makes a file a `.webloc`.
 pub const KEY_URL: &str = "URL";
 /// The extra key a `.inetloc` carries: the link's display title.
 pub const KEY_URL_NAME: &str = "URLName";
+
+/// The creator code of every internet location file macOS writes: `MACS`.
+pub const FINDER_CREATOR: [u8; 4] = *b"MACS";
+
+/// `true` if a 32-byte `com.apple.FinderInfo` value describes an internet
+/// location file.
+///
+/// The check is `creator == MACS` and a type code beginning `il` — "internet
+/// location", with the last two characters naming the scheme. Observed on
+/// macOS 15.5, by asking Finder to write one of each:
+///
+/// | Type | Extension | URL |
+/// |---|---|---|
+/// | `ilht` | `.webloc` | `https://…` |
+/// | `ilft` | `.ftploc` | `ftp://…` |
+/// | `ilma` | `.mailloc` | `mailto:…` |
+/// | `ilfi` | `.fileloc` | `file://…` |
+/// | `ilaf` | `.afploc` | `afp://…` |
+/// | `ilnw` | `.nntploc` | `news:…` |
+///
+/// The prefix is matched rather than that list, because the list is open: the
+/// last two characters follow the scheme, and a scheme this table does not
+/// mention still produces an internet location file.
+///
+/// This is not in either fork. `FinderInfo` is an extended attribute, and
+/// fetching it is the caller's business — but for the legacy form it is the
+/// only thing that says what an empty data fork was, so this crate knows how to
+/// read the answer. Anything shorter than the first eight bytes is `false`.
+#[must_use]
+pub fn is_internet_location_finder_info(finder_info: &[u8]) -> bool {
+    let Some(head) = finder_info.get(..8) else {
+        return false;
+    };
+    head.starts_with(b"il") && head[4..8] == FINDER_CREATOR
+}
 
 /// Which of the two plist encodings the file uses.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -74,6 +121,9 @@ pub enum Encoding {
     Xml,
     /// A `bplist00` binary property list. What a drag from a browser writes.
     Binary,
+    /// A Macintosh resource fork holding a `url ` resource. The pre-OS X form,
+    /// which Finder still writes alongside the plist. See [`rsrc`].
+    ResourceFork,
 }
 
 /// A parsed internet location file.
@@ -87,19 +137,24 @@ pub struct Webloc<'a> {
 impl<'a> Webloc<'a> {
     /// Sniff the encoding without parsing.
     ///
-    /// `None` for anything that is neither — a text file someone renamed, or
-    /// the resource-fork-only form described under *What is not implemented*.
+    /// `None` for anything that is none of the three — a text file someone
+    /// renamed, or an empty data fork whose resource fork was not handed over.
+    ///
+    /// The two plist encodings have magic and go first. A resource fork has
+    /// none: it opens with four offsets, so recognising one means checking that
+    /// those four agree with the buffer and that the resource map's own two
+    /// offsets agree with the map. That check is strict enough that text cannot
+    /// pass it — the first four bytes of any text are a data offset in the
+    /// hundreds of millions — but it is a structural verdict rather than a
+    /// signature, which is why it is tried last.
     #[must_use]
     pub fn detect(buf: &[u8]) -> Option<Encoding> {
-        // TODO(phase-4): the legacy resource-fork form, whose data fork is
-        // empty and whose `url ` resource holds the URL. Detecting it needs the
-        // resource fork, which is not in this buffer — on macOS it is the
-        // `..namedfork/rsrc` stream, and in an archive it is an AppleDouble
-        // sidecar. Both are a separate reader.
         if BinaryPlist::detect(buf) {
             Some(Encoding::Binary)
         } else if xml::detect(buf) {
             Some(Encoding::Xml)
+        } else if ResourceFork::detect(buf) {
+            Some(Encoding::ResourceFork)
         } else {
             None
         }
@@ -115,8 +170,53 @@ impl<'a> Webloc<'a> {
         match Self::detect(buf) {
             Some(Encoding::Binary) => Self::parse_binary(buf),
             Some(Encoding::Xml) => Self::parse_xml(buf),
+            Some(Encoding::ResourceFork) => Self::parse_resource_fork(buf),
             None => Err(Error::new(ErrorKind::BadMagic, 0)),
         }
+    }
+
+    /// Parse the legacy resource-fork form: a fork with a `url ` resource.
+    ///
+    /// `buf` is the **resource fork**, not the file. On macOS that is the
+    /// `<file>/..namedfork/rsrc` stream; see [`rsrc`].
+    ///
+    /// Fails with [`ErrorKind::Malformed`] when the fork parses and has no
+    /// `url ` resource, for the same reason the plist form fails without a
+    /// `URL` key: that resource is the whole content of the format, so a fork
+    /// without one is a different document that happens to be a resource fork.
+    ///
+    /// # No `URLName`
+    ///
+    /// This form carries no title. Finder puts the name in the *filename* and
+    /// writes no `urln` resource — confirmed against files it wrote for `http`,
+    /// `mailto`, `ftp`, `afp`, `file` and `news` URLs, every one of which held
+    /// exactly `drag`, `TEXT` and `url `. [`Webloc::url_name`] is therefore
+    /// always `None` here, rather than guessed at from the `TEXT` resource,
+    /// which holds the URL again and not a title.
+    pub fn parse_resource_fork(buf: &'a [u8]) -> Result<Self> {
+        let fork = ResourceFork::parse(buf)?;
+        let res = fork
+            .first_resource(rsrc::TYPE_URL)
+            .ok_or(Error::new(ErrorKind::Malformed, 0))??;
+        // A compressed resource's bytes are a compressed image, not the URL.
+        // Handing them back as text would be confidently wrong.
+        if res.is_compressed() {
+            return Err(Error::new(ErrorKind::Unsupported, 0));
+        }
+        // The resource is text in the writing machine's system encoding, which
+        // the fork does not record. A URL is ASCII by RFC 3986 and every
+        // capture is, so valid UTF-8 is the whole of the real world; anything
+        // else needs a code page nobody wrote down. The bytes stay reachable
+        // through `rsrc` for a caller that knows better.
+        let url = core::str::from_utf8(res.data)
+            .map_err(|e| Error::new(ErrorKind::InvalidUtf8, e.valid_up_to()))?;
+
+        Ok(Self {
+            encoding: Encoding::ResourceFork,
+            // Never XML-escaped: a resource is bytes, not markup.
+            url: Text::Utf8(url),
+            url_name: None,
+        })
     }
 
     fn parse_xml(buf: &'a [u8]) -> Result<Self> {

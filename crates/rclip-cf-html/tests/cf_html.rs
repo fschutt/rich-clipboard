@@ -200,6 +200,136 @@ fn bare_html_is_not_cf_html() {
     assert_eq!(err.offset, 0);
 }
 
+// ------------------------------------------------------------------- BOM
+
+#[test]
+fn a_leading_utf8_bom_does_not_end_the_header_before_it_starts() {
+    let blob = fixture("utf8-bom-counted.bin");
+    assert_eq!(&blob[..3], b"\xef\xbb\xbf");
+
+    let p = parse_detailed(&blob).expect("a BOM must not make this BadMagic");
+    assert_eq!(p.header.bom_len, 3);
+    assert_eq!(p.content.version, Version::V1_0);
+    assert_eq!(p.content.fragment, "hi there");
+    assert_eq!(
+        p.content.context.unwrap(),
+        "<html><body><!--StartFragment-->hi there<!--EndFragment--></body></html>",
+        "the whole context, with nothing of the header and nothing of the BOM in it"
+    );
+    assert_eq!(
+        p.fragment_source,
+        FragmentSource::Agreed,
+        "the producer counted the BOM, so its numbers and its comments agree"
+    );
+}
+
+#[test]
+fn the_bom_is_counted_in_header_len_and_in_start_html() {
+    let blob = fixture("utf8-bom-counted.bin");
+    let p = parse_detailed(&blob).unwrap();
+    // The whole decision, in one assertion: `StartHTML` is documented to equal
+    // the header length, and this parser's independently-derived `header_len`
+    // includes the three bytes of the mark.
+    assert_eq!(p.header.start_html, Offset::At(p.header.header_len));
+    assert_eq!(p.header.header_len, 108);
+}
+
+#[test]
+fn a_producer_that_did_not_count_the_bom_still_pastes() {
+    let blob = fixture("utf8-bom-uncounted.bin");
+    let p = parse_detailed(&blob).unwrap();
+    assert_eq!(p.header.bom_len, 3);
+    // Three bytes short, i.e. pointing into the header. The clamp catches it.
+    assert_eq!(p.header.start_html, Offset::At(p.header.header_len - 3));
+    assert!(
+        p.content.context.unwrap().starts_with("<html><body>"),
+        "the clamp keeps header bytes out of the context"
+    );
+    // The fragment is exact, because the marker comments move with the content.
+    assert_eq!(p.content.fragment, "hi there");
+    assert_eq!(p.fragment_source, FragmentSource::CommentsOverrodeOffsets);
+    // And this is the documented cost: EndHTML under-reports by three, so the
+    // tail of </html> is missing. Pinned so the trade-off cannot drift silently.
+    assert_eq!(
+        p.content.context.unwrap(),
+        "<html><body><!--StartFragment-->hi there<!--EndFragment--></body></ht"
+    );
+}
+
+#[test]
+fn a_bom_alone_is_still_not_cf_html() {
+    // Skipping the mark must not also skip the `Version:` requirement.
+    let err = parse(b"\xef\xbb\xbf<html>hello</html>").expect_err("no Version: line");
+    assert_eq!(err.kind, ErrorKind::BadMagic);
+}
+
+#[test]
+fn a_bom_in_the_middle_is_body_text_and_not_a_mark() {
+    // Header is 63 bytes, so the body — BOM included — is 63..69.
+    let blob =
+        b"Version:1.0\r\nStartFragment:0000000063\r\nEndFragment:0000000069\r\n\xef\xbb\xbfhi!";
+    let p = parse_detailed(blob).unwrap();
+    assert_eq!(p.header.bom_len, 0, "only a *leading* BOM is a mark");
+    assert_eq!(p.content.fragment, "\u{feff}hi!");
+}
+
+// -------------------------------------------------------- repeated keys
+
+#[test]
+fn a_repeated_fragment_pair_takes_the_first_and_says_so() {
+    let blob = fixture("duplicate-fragment-pairs.bin");
+    let p = parse_detailed(&blob).expect("a repeat is not a reason to refuse a paste");
+
+    assert!(
+        p.header.duplicate_keys,
+        "dropping a value silently is what this flag exists to prevent"
+    );
+    assert_eq!(
+        p.fragment_source,
+        FragmentSource::OffsetsOnly,
+        "no marker comments, so the offsets are the only evidence there is"
+    );
+    assert_eq!(
+        p.content.fragment, "alpha",
+        "first pair wins; a second pair appended to the header changes nothing"
+    );
+}
+
+#[test]
+fn first_wins_applies_to_every_recognised_key() {
+    // StartHTML is the true header length, 189, because the scan stops as soon
+    // as the cursor reaches the declared start of the body — a `StartHTML:0`
+    // would end the header after its own line and prove nothing.
+    let blob = b"Version:0.9\r\nVersion:1.0\r\n\
+StartHTML:0000000189\r\nStartHTML:0000000999\r\n\
+SourceURL:https://first.example/\r\nSourceURL:https://second.example/\r\n\
+StartFragment:0000000000\r\nEndFragment:0000000000\r\n\
+<html><!--StartFragment-->x<!--EndFragment--></html>";
+    let p = parse_detailed(blob).unwrap();
+    assert!(p.header.duplicate_keys);
+    assert_eq!(p.content.version, Version::V0_9);
+    assert_eq!(p.header.start_html, Offset::At(189));
+    assert_eq!(p.content.source_url, Some("https://first.example/"));
+    assert_eq!(p.content.fragment, "x");
+}
+
+#[test]
+fn a_malformed_repeat_is_still_malformed() {
+    // The duplicate's value is dropped, not skipped: a header line that is not
+    // a number is a broken header whether or not a good one preceded it.
+    let blob = b"Version:1.0\r\nStartHTML:0000000000\r\nStartHTML:not-a-number\r\n\
+StartFragment:0000000000\r\nEndFragment:0000000000\r\n<html>x</html>";
+    assert_eq!(parse(blob).unwrap_err().kind, ErrorKind::Malformed);
+}
+
+#[test]
+fn no_duplicate_flag_on_a_clean_header() {
+    let blob = fixture("mshtml-scenario1.bin");
+    let p = parse_detailed(&blob).unwrap();
+    assert!(!p.header.duplicate_keys);
+    assert_eq!(p.header.bom_len, 0);
+}
+
 #[test]
 fn every_fixture_matches_its_sidecar() {
     for name in fixture_names() {

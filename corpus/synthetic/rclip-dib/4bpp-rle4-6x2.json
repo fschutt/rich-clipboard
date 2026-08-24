@@ -1,0 +1,7 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "6x2 4bpp BI_RLE4 with a nibble-alternating encoded run and an odd-length absolute run",
+  "expect": "ok",
+  "notes": "The encoded run repeats the two nibbles of 0x12 as 1,2,1,2,1,2 \u2014 high nibble first. The absolute run of 5 packs into 3 bytes, so it needs a pad byte to reach a WORD boundary; a decoder that computes bytes as n/2 rather than ceil(n/2) desynchronises here."
+}

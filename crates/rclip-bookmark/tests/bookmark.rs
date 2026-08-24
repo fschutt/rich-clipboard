@@ -445,7 +445,7 @@ fn every_fixture_matches_its_sidecar() {
         checked += 1;
     }
     assert!(
-        checked >= 11,
+        checked >= 12,
         "expected the whole synthetic corpus, saw {checked}"
     );
 }
@@ -470,4 +470,95 @@ fn unknown_types_survive_as_raw_bytes() {
     }
     bm.validate()
         .expect("an unknown leaf type is not a structural error");
+}
+
+#[test]
+fn every_cfnumber_subtype_decodes_at_the_width_the_record_declares() {
+    let bytes = fixture("cfnumber-subtypes.bin");
+    let bm = Bookmark::parse(&bytes).expect("well-formed");
+    let toc = bm.tocs().next().unwrap().expect("one TOC");
+
+    let values: Vec<Value<'_>> = toc
+        .iter()
+        .map(|e| e.unwrap().value().expect("every record decodes"))
+        .collect();
+
+    assert_eq!(
+        values,
+        vec![
+            Value::I8(-1),                     // 1  SInt8
+            Value::F64(1.25),                  // 6  Float64
+            Value::I8(-1),                     // 7  char
+            Value::I16(-32768),                // 8  short
+            Value::I32(-123_456),              // 9  int
+            Value::I32(-2),                    // 10 long, four bytes
+            Value::I64(-2),                    // 10 long, eight bytes
+            Value::I64(i64::MIN),              // 11 long long
+            Value::F32(1.5),                   // 12 float
+            Value::F64(-2.5),                  // 13 double
+            Value::I64(9_007_199_254_740_993), // 14 CFIndex, eight bytes
+            Value::I32(7),                     // 15 NSInteger, four bytes
+            Value::F64(0.5),                   // 16 CGFloat, eight bytes
+            Value::F32(0.25),                  // 16 CGFloat, four bytes
+            // 17 is one past kCFNumberMaxType, so there is nothing to decode
+            // it as and the payload comes back untouched.
+            Value::Unknown {
+                type_code: 0x0311,
+                data: &[0, 0, 0, 0],
+            },
+        ]
+    );
+    bm.validate().expect("graph is sound");
+}
+
+#[test]
+fn a_width_ambiguous_subtype_follows_the_record_length_and_not_a_guess() {
+    // `long`, `CFIndex`, `NSInteger` and `CGFloat` are four bytes wide in a
+    // 32-bit process and eight in a 64-bit one, and the subtype does not say
+    // which. Reading eight bytes for a four-byte `long` would consume the
+    // record that follows as the value's high half — a wrong number rather
+    // than an error, which is why the length field has to be what decides.
+    let bytes = fixture("cfnumber-subtypes.bin");
+    let bm = Bookmark::parse(&bytes).unwrap();
+    let toc = bm.tocs().next().unwrap().unwrap();
+    let v = |i: usize| toc.get(i).unwrap().value().unwrap();
+
+    // Both of these are CFNumberType 10; only their record lengths differ.
+    assert_eq!(v(5), Value::I32(-2));
+    assert_eq!(v(6), Value::I64(-2));
+    assert_eq!(v(5).as_i64(), v(6).as_i64(), "and they mean the same thing");
+
+    // Same for CGFloat, which is a `double` on one and a `float` on the other.
+    assert_eq!(v(12), Value::F64(0.5));
+    assert_eq!(v(13), Value::F32(0.25));
+
+    // A 64-bit CFIndex has to stay integral: routing it through f64 would
+    // round 2^53 + 1 down to 2^53.
+    assert_eq!(v(10).as_i64(), Some(9_007_199_254_740_993));
+    assert_eq!(v(10).as_f64(), None, "an integer is not a float");
+}
+
+#[test]
+fn the_c_type_subtypes_are_the_same_values_as_their_fixed_width_twins() {
+    // CoreFoundation normalises to 1..=6 when it encodes, so 7 (`char`) and 1
+    // (`SInt8`) describe the same byte. The decoder has to agree with that.
+    let bytes = fixture("cfnumber-subtypes.bin");
+    let bm = Bookmark::parse(&bytes).unwrap();
+    let toc = bm.tocs().next().unwrap().unwrap();
+
+    assert_eq!(
+        toc.get(0).unwrap().value().unwrap(),
+        toc.get(2).unwrap().value().unwrap(),
+        "SInt8 and char"
+    );
+    assert_eq!(
+        toc.get(1).unwrap().value().unwrap(),
+        Value::F64(1.25),
+        "Float64"
+    );
+    assert_eq!(
+        toc.get(9).unwrap().value().unwrap(),
+        Value::F64(-2.5),
+        "double decodes as Float64 does"
+    );
 }

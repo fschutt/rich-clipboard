@@ -2,9 +2,10 @@
 
 Reader for macOS **`.webloc`** and **`.inetloc`** internet location files — a
 property list whose single dictionary has the key `URL`, plus `URLName` on a
-`.inetloc`. Reads both encodings that occur in the wild: XML plists and
-`bplist00` binary plists. `#![no_std]`, `#![forbid(unsafe_code)]`, borrows from
-the caller's buffer, no dependencies beyond `rclip-core`.
+`.inetloc`. Reads all three encodings that occur in the wild: XML plists,
+`bplist00` binary plists, and the pre-OS X **resource fork** with its `url `
+resource. `#![no_std]`, `#![forbid(unsafe_code)]`, borrows from the caller's
+buffer, no dependencies beyond `rclip-core`.
 
 ## Spec
 
@@ -19,6 +20,53 @@ the convention is the `URL` key. References:
 - `corpus/synthetic/rclip-webloc/finder-created.webloc`, written by Finder on
   macOS 15.5, and `finder-binary.webloc`, the same file through
   CoreFoundation's own binary writer.
+
+### Resource fork layout
+
+The legacy form, read by the `rsrc` module. From *Inside Macintosh: More
+Macintosh Toolbox*, "Resource File Format", cross-checked against the Kaitai
+Struct [`resource_fork.ksy`](https://formats.kaitai.io/resource_fork/) and
+against the captured fork byte for byte. **Big-endian throughout**, like the
+binary plist and unlike every Win32 structure in this workspace.
+
+```
+header   16 bytes at 0:  u32 data_offset │ u32 map_offset
+                         u32 data_len    │ u32 map_len
+         then 112 bytes reserved for the system and 128 for the application
+
+data     at data_offset: one block per resource, u32 length then that many bytes
+
+map      at map_offset:  16 reserved header copy │ 4 next-map handle
+                         │ 2 file ref │ 2 attributes
+                         │ 2 offset to the type list │ 2 offset to the name list
+
+type     u16 number of types MINUS ONE, then 8 bytes per type:
+list       4 type code │ u16 count minus one │ u16 offset to its reference
+           list, measured from the start of the type list
+
+ref      12 bytes per resource: i16 id │ u16 name offset (0xFFFF = unnamed)
+list       │ u8 attributes │ u24 offset into the data area │ u32 reserved
+
+names    Pascal strings: one length byte, then that many bytes
+```
+
+The two *minus one* counts are the trap. A type list that says `0` holds one
+type, and one that says `0xFFFF` holds **none** rather than 65 536 — wrapping,
+not saturating, which is how an empty fork is expressible.
+
+The three resources Finder writes are `url ` (the URL; note the trailing space,
+type codes are exactly four characters), `TEXT` (the URL again, so that dragging
+the file somewhere expecting text produces something), and `drag` (the Drag
+Manager flavor list naming the other two). There is no `urln`: asking Finder to
+write an internet location file with a name puts the name in the *filename*, and
+files written for `http`, `mailto`, `ftp`, `afp`, `file` and `news` URLs on
+macOS 15.5 all carried exactly those three resources. So `Webloc::url_name` is
+always `None` for this form rather than guessed at from `TEXT`.
+
+A resource fork is a separate stream and is not in the file's bytes: on macOS it
+is `<file>/..namedfork/rsrc`, in an archive it is an AppleDouble sidecar, and on
+the clipboard it does not travel at all. Hand `Webloc::parse` whichever stream
+you have; it works out which of the three encodings it is.
 
 ### Binary plist layout
 
@@ -110,19 +158,23 @@ Because the bytes are often not the value:
 
 ## What is not implemented
 
-- **The legacy resource-fork form.** Pre-OS X internet location files had an
-  empty data fork and carried the URL in `url ` and `drag` resources; Finder
-  still writes those resources alongside the plist today, as the captured
-  fixture's own resource fork shows. Reading them needs a resource-fork reader,
-  which is a separate format. `// TODO(phase-4):` in `Webloc::detect`.
 - **`bplist15` / `bplist16`.** A different object encoding. Rejected with
   `ErrorKind::Unsupported` rather than misread under version-00 rules.
 - **Everything in a plist that is not a string.** Numbers, dates, data, arrays
   and sets decode to `Object::Other`. A `.webloc` has no use for them, and each
   type left undecoded is a type that cannot be a parser bug.
-- **CDATA sections and mixed content** in XML values. Property lists do not
-  contain them; encountering one is `ErrorKind::Unsupported`.
-  `// TODO(phase-4):` in `src/xml.rs`.
+- **CDATA sections and mixed content** in XML values. Encountering one is
+  `ErrorKind::Unsupported`. Left alone in phase 4 on evidence rather than by
+  omission: CoreFoundation's XML writer escapes with entity references and
+  never emits CDATA, confirmed by handing `plutil -convert xml1` a string
+  containing `&`, `<`, `>`, a quote and a literal `]]>` and getting entities
+  back for all of them. Accepting CDATA would add an unexercised branch to a
+  parser whose input is written by another process.
+- **Writing a resource fork,** and the rest of the Resource Manager: compressed
+  resources (`resCompressed`, which `rsrc` reports and does not decompress),
+  the AppleDouble and AppleSingle containers a fork travels in off an HFS
+  volume, and resource *editing*. Reading a `url ` resource is the whole of what
+  a location file needs.
 - **No serializer.** `PLAN.md` scopes writers to `shell-link`, `cf-html` and
   `dropfiles`.
 
@@ -143,6 +195,26 @@ Because the bytes are often not the value:
 | `bplist-too-short.webloc` | error | Below header + trailer → `UnexpectedEof` |
 | `xml-no-url-key.webloc` | error | A plist, but not a location file → `Malformed` |
 | `not-a-plist.webloc` | error | A renamed text file → `BadMagic` |
+| `rsrc-named-resources.bin` | ok | A resource fork with named resources and a negative ID |
+| `rsrc-no-url-resource.bin` | error | A fork with no `url ` resource → `Malformed` |
+| `rsrc-map-past-end.bin` | error | Header disagrees with the buffer → `BadMagic` |
+| `rsrc-type-list-past-map.bin` | error | Type list outside the map → `BadOffset` |
+| `rsrc-data-offset-past-end.bin` | error | Data block outside the data area → `BadOffset` |
 
-All five `ok` fixtures round-trip through `plutil -p`, and `plutil` rejects all
-six malformed ones too.
+Plus one capture outside this directory: `corpus/macos/finder/webloc-resource-fork.bin`
+is the **resource fork of the same file** whose data fork is `finder-created.bin`,
+read out of its `..namedfork/rsrc` stream. `DeRez` on the original lists the same
+three resources this crate parses. The synthetic resource-fork fixtures were built
+with Apple's own `Rez(1)` rather than assembled by hand, so their layout is the
+Resource Manager's and not this repository's reading of it.
+
+All five plist `ok` fixtures round-trip through `plutil -p`, and `plutil` rejects
+all six malformed plist ones too.
+
+The two `BadMagic` / `BadOffset` resource-fork fixtures are a pair on purpose.
+Recognising a resource fork *is* checking its header, because the format has no
+magic number, so a header that disagrees with the buffer means "not this format"
+— `BadMagic` — while a sound header with a broken map means "this format, broken"
+— `BadOffset`. Collapsing detection into a full parse would report every
+structural error inside the map as `BadMagic`, which tells a caller the wrong
+thing.

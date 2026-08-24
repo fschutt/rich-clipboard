@@ -1,0 +1,8 @@
+{
+  "format": "webloc",
+  "origin": "synthetic",
+  "description": "A resource fork with a valid header whose resource map points its type list past the end of the map",
+  "expect": "error",
+  "error_kind": "BadOffset",
+  "notes": "rsrc-named-resources.bin with the map's type-list offset raised from 28 to 102, which is the map's own length. Expected: ErrorKind::BadOffset. The header agrees with the buffer, so the sniff accepts it as a resource fork and the error comes from the map instead - which is the distinction rsrc-map-past-end.bin exists to contrast with. The type list opens with a two-byte count, so an offset that leaves fewer than two bytes of map is rejected before any type entry is read."
+}

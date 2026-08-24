@@ -39,6 +39,14 @@
 //! - **Unknown header keys must be skipped, not rejected.** The spec reserves
 //!   the right to extend the header, and Internet Explorer already did, with
 //!   `SourceURL`.
+//! - **A leading UTF-8 BOM must not end the parse.** `EF BB BF` before
+//!   `Version:` makes the first line's "key" non-ASCII, which used to close the
+//!   header before it opened and reject the blob. It is skipped for line
+//!   reading and *counted* for every offset. See [`Header::bom_len`].
+//! - **A repeated keyword takes its first value.** The spec floats multiple
+//!   `StartFragment`/`EndFragment` pairs as a future extension; nothing emits
+//!   them, so a repeat today is a producer bug or a way to make two readers
+//!   disagree about which bytes the user copied. See [`Header::duplicate_keys`].
 //!
 //! # Reading
 //!
@@ -80,7 +88,7 @@ mod parse;
 #[cfg(feature = "alloc")]
 mod serialize;
 
-pub use header::{Header, Offset, Version};
+pub use header::{Header, Offset, Version, UTF8_BOM};
 pub use parse::{parse, parse_detailed, CfHtml, FragmentSource, Parsed};
 #[cfg(feature = "alloc")]
 pub use serialize::CfHtmlBuilder;

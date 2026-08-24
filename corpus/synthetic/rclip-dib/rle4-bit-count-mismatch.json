@@ -1,0 +1,8 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "BI_RLE4 declared on an 8-bpp bitmap",
+  "expect": "error",
+  "error_kind": "Malformed",
+  "notes": "BI_RLE4 is valid only at 4 bpp. The two run grammars walk a different number of pixels per byte, so reading one as the other desynchronises on the first encoded run."
+}

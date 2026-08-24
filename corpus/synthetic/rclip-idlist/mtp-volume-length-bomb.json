@@ -1,0 +1,7 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "MTP volume declaring 0xFFFFFFFF characters of name in a 60-byte item",
+  "notes": "The four string lengths are all 0xFFFFFFFF. On a 32-bit target the characters-to-bytes multiply overflows; on a 64-bit one the slice simply runs past the end. Both have to come back as \"no name\" rather than a panic, which is why the fixture expects \"ok\": item parsing in this crate never fails."
+}

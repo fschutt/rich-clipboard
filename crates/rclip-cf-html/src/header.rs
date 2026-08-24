@@ -8,6 +8,11 @@
 
 use rclip_core::{Error, ErrorKind, Reader, Result};
 
+/// The UTF-8 byte order mark, `EF BB BF`.
+///
+/// See [`Header::bom_len`] for what this parser does with one, and why.
+pub const UTF8_BOM: &[u8] = &[0xEF, 0xBB, 0xBF];
+
 /// Longest key this parser will look for a `:` inside.
 ///
 /// Bounds the colon scan so a multi-megabyte body line does not get searched
@@ -127,11 +132,48 @@ pub struct Header<'a> {
     /// Internet Explorer page and emitted by every mainstream browser, so it is
     /// parsed as a first-class field rather than left as an unknown key.
     pub source_url: Option<&'a str>,
-    /// How many bytes the header occupies. The body begins here.
+    /// How many bytes the header occupies, **the byte order mark included**.
+    /// The body begins here.
     ///
     /// This is the parser's own answer, independent of `start_html`, and it is
     /// what a lying `StartHTML` gets clamped against.
     pub header_len: usize,
+    /// `3` if the blob began with a UTF-8 BOM, `0` otherwise.
+    ///
+    /// # Why this is a field and not a silent strip
+    ///
+    /// A `CF_HTML` offset is a byte count *from the start of the blob*, so a
+    /// producer that prepends `EF BB BF` shifts every one of them by three
+    /// relative to a reader that removes it first. Which of the two the
+    /// producer meant is not knowable from the bytes.
+    ///
+    /// This parser takes the offsets to **include** the BOM — the blob starts
+    /// where the blob starts, and a producer that prepends a BOM is measuring
+    /// positions in the very buffer it is writing, which has the BOM in it. So
+    /// the mark is skipped for the purpose of reading `Key:Value` lines and
+    /// counted for the purpose of everything else: `header_len` includes it,
+    /// and every offset resolves against the original buffer untouched.
+    ///
+    /// A producer that did *not* count it is not left in ruins either. Its
+    /// `StartHTML` comes out three bytes short, which
+    /// [`crate::parse`] already clamps up to the end of the header, and its
+    /// `StartFragment`/`EndFragment` lose to the `<!--StartFragment-->` marker
+    /// comments, which move with the content. The one thing it does cost is the
+    /// last three bytes of [`crate::CfHtml::context`], which `EndHTML` then
+    /// under-reports. A caller that wants to detect that case has this field
+    /// and `header_len` to compare `start_html` against.
+    ///
+    /// No real capture in the corpus prepends a BOM to a `CF_HTML` payload.
+    /// This exists because one that did used to fail the parse outright: the
+    /// first line reads `<BOM>Version:1.0`, whose "key" is not ASCII, so the
+    /// header ended before it began and the blob was rejected as `BadMagic`.
+    pub bom_len: usize,
+    /// Whether any recognised keyword appeared more than once.
+    ///
+    /// The first occurrence of each key wins; see [`crate::parse`] for the
+    /// reasoning. This flag is how a caller auditing a producer finds out that
+    /// a value was dropped, since the parse itself succeeds.
+    pub duplicate_keys: bool,
 }
 
 /// Split a line off the front of `rest`.
@@ -230,6 +272,21 @@ fn parse_offset(value: &[u8], at: usize) -> Result<Offset> {
     Ok(Offset::At(n))
 }
 
+/// Take the first occurrence of an offset keyword and note any repeat.
+///
+/// The repeated value is still parsed, so a malformed second `StartHTML:` is
+/// still a malformed header rather than something skipped because the first one
+/// was fine.
+fn take_first(slot: &mut Offset, value: &[u8], at: usize, duplicate: &mut bool) -> Result<()> {
+    let parsed = parse_offset(value, at)?;
+    if slot.is_present() {
+        *duplicate = true;
+    } else {
+        *slot = parsed;
+    }
+    Ok(())
+}
+
 /// Consume the description header, leaving the reader at the first byte of the
 /// body.
 pub(crate) fn parse_header<'a>(r: &mut Reader<'a>) -> Result<Header<'a>> {
@@ -243,9 +300,21 @@ pub(crate) fn parse_header<'a>(r: &mut Reader<'a>) -> Result<Header<'a>> {
         end_selection: Offset::Absent,
         source_url: None,
         header_len: 0,
+        bom_len: 0,
+        duplicate_keys: false,
     };
     let mut version_seen = false;
     let mut selection_key_at = 0usize;
+
+    // A UTF-8 BOM is skipped for the purpose of finding `Version:`, and counted
+    // for the purpose of every offset — the cursor stays on the original
+    // buffer, so `header_len` and everything downstream include it. See
+    // `Header::bom_len` for why that is the reading, and for what happens to a
+    // producer that disagreed.
+    if r.remaining().starts_with(UTF8_BOM) {
+        r.skip(UTF8_BOM.len())?;
+        h.bom_len = UTF8_BOM.len();
+    }
 
     loop {
         let line_at = r.pos();
@@ -263,42 +332,70 @@ pub(crate) fn parse_header<'a>(r: &mut Reader<'a>) -> Result<Header<'a>> {
         };
         let value_at = line_at + key.len() + 1;
 
+        // Every recognised keyword takes its *first* value. The spec floats
+        // "multiple StartFragment and EndFragment pairs [...] to support
+        // noncontiguous selection of fragments" as a future extension, but no
+        // producer has ever emitted one, so a repeated key in a payload today is
+        // a producer bug or a deliberate ambiguity — and the two readings of it
+        // disagree about which bytes the user copied. First-wins is the reading
+        // that cannot be appended to: a hostile producer cannot bolt a second
+        // `StartFragment` onto the end of a header and have a lenient reader see
+        // a different fragment than a strict one. The alternative, rejecting the
+        // payload, would be a paste that silently does nothing, which is exactly
+        // what this crate refuses to do for `Version:1.1`.
         if key_is(key, "Version") {
-            h.version = Version::from_bytes(value.trim_ascii(), value_at)?;
-            version_seen = true;
+            if version_seen {
+                h.duplicate_keys = true;
+            } else {
+                h.version = Version::from_bytes(value.trim_ascii(), value_at)?;
+                version_seen = true;
+            }
         } else if key_is(key, "StartHTML") {
-            h.start_html = parse_offset(value, value_at)?;
+            take_first(&mut h.start_html, value, value_at, &mut h.duplicate_keys)?;
         } else if key_is(key, "EndHTML") {
-            h.end_html = parse_offset(value, value_at)?;
+            take_first(&mut h.end_html, value, value_at, &mut h.duplicate_keys)?;
         } else if key_is(key, "StartFragment") {
-            // TODO(phase-1): the spec floats "multiple StartFragment and
-            // EndFragment pairs [...] to support noncontiguous selection of
-            // fragments" as a future extension. Nothing emits them, and there
-            // is nowhere in a borrowed, non-allocating return type to put a
-            // list. A repeated key currently overwrites: last one wins.
-            h.start_fragment = parse_offset(value, value_at)?;
+            take_first(
+                &mut h.start_fragment,
+                value,
+                value_at,
+                &mut h.duplicate_keys,
+            )?;
         } else if key_is(key, "EndFragment") {
-            h.end_fragment = parse_offset(value, value_at)?;
+            take_first(&mut h.end_fragment, value, value_at, &mut h.duplicate_keys)?;
         } else if key_is(key, "StartSelection") {
-            h.start_selection = parse_offset(value, value_at)?;
-            selection_key_at = value_at;
+            if !h.start_selection.is_present() {
+                selection_key_at = value_at;
+            }
+            take_first(
+                &mut h.start_selection,
+                value,
+                value_at,
+                &mut h.duplicate_keys,
+            )?;
         } else if key_is(key, "EndSelection") {
-            h.end_selection = parse_offset(value, value_at)?;
-            selection_key_at = value_at;
+            if !h.end_selection.is_present() {
+                selection_key_at = value_at;
+            }
+            take_first(&mut h.end_selection, value, value_at, &mut h.duplicate_keys)?;
         } else if key_is(key, "SourceURL") {
             let v = value.trim_ascii();
             let leading_ws = value.len() - value.trim_ascii_start().len();
-            h.source_url = Some(core::str::from_utf8(v).map_err(|e| {
+            let url = core::str::from_utf8(v).map_err(|e| {
                 Error::new(
                     ErrorKind::InvalidUtf8,
                     value_at + leading_ws + e.valid_up_to(),
                 )
-            })?);
+            })?;
+            if h.source_url.is_some() {
+                h.duplicate_keys = true;
+            } else {
+                h.source_url = Some(url);
+            }
         }
         // Any other key is skipped in silence. The spec reserves the right to
-        // extend the header ("multiple StartFragment/EndFragment pairs could be
-        // added later"), so an unknown key is a forward-compatible producer,
-        // not a malformed blob.
+        // extend the header, so an unknown key is a forward-compatible
+        // producer, not a malformed blob.
 
         r.skip(total)?;
 

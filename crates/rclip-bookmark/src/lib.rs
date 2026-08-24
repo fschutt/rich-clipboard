@@ -547,20 +547,53 @@ fn visit(value: &Value<'_>, at: usize, budget: &mut usize) -> Result<()> {
 /// `CFNumberType` enum they come from say signed, so signed is what this
 /// returns. It matters for `0x2012` volume size on a volume bigger than 8 EiB,
 /// and nowhere else.
+///
+/// # The width-ambiguous subtypes
+///
+/// [`number::LONG`], [`number::CF_INDEX`], [`number::NS_INTEGER`] and
+/// [`number::CG_FLOAT`] name a C or platform type whose width follows the data
+/// model of the process that wrote the record — four bytes from a 32-bit
+/// process, eight from a 64-bit one — so the constant alone does not say how
+/// many bytes to read. **The record's own length field does**, and it is
+/// authoritative: it was written by the same encoder, in the same process, from
+/// `sizeof` the value it was storing. So those four dispatch on the payload
+/// length rather than on an assumption about the writer's architecture.
+///
+/// Nothing in the corpus exercises them, because CoreFoundation normalises to
+/// the fixed-width types 1–6 when it encodes. They are decoded anyway: an
+/// encoder that does not normalise is a legal `CFNumber` writer, and guessing
+/// eight bytes for a four-byte `long` reads the next record as the high half of
+/// this one — a wrong number rather than an error, which is the failure mode
+/// worth spending a `match` arm to avoid.
 fn number_value<'a>(data: &'a [u8], subtype: u32, type_code: u32) -> Result<Value<'a>> {
     let mut r = Reader::new(data);
     Ok(match subtype {
-        number::SINT8 => Value::I8(r.i8()?),
-        number::SINT16 => Value::I16(r.i16_le()?),
-        number::SINT32 => Value::I32(r.i32_le()?),
-        number::SINT64 => Value::I64(r.i64_le()?),
-        number::FLOAT32 => Value::F32(f32::from_bits(r.u32_le()?)),
-        number::FLOAT64 => Value::F64(r.f64_le()?),
-        // CFNumberType also defines 7..=16 (char, short, int, long, CFIndex,
-        // CGFloat …), but CoreFoundation normalises to the fixed-width types
-        // above when it encodes, so nothing in the corpus uses them.
-        // TODO(phase-4): decode the remaining CFNumberType subtypes if a real
-        // capture ever turns one up.
+        number::SINT8 | number::CHAR => Value::I8(r.i8()?),
+        number::SINT16 | number::SHORT => Value::I16(r.i16_le()?),
+        number::SINT32 | number::INT => Value::I32(r.i32_le()?),
+        number::SINT64 | number::LONG_LONG => Value::I64(r.i64_le()?),
+        number::FLOAT32 | number::FLOAT => Value::F32(f32::from_bits(r.u32_le()?)),
+        number::FLOAT64 | number::DOUBLE => Value::F64(r.f64_le()?),
+        number::LONG | number::CF_INDEX | number::NS_INTEGER => {
+            if data.len() == 4 {
+                Value::I32(r.i32_le()?)
+            } else {
+                // Eight is the only other width these ever have, and a record
+                // too short for one fails in `i64_le` exactly as a truncated
+                // `SINT64` does.
+                Value::I64(r.i64_le()?)
+            }
+        }
+        number::CG_FLOAT => {
+            if data.len() == 4 {
+                Value::F32(f32::from_bits(r.u32_le()?))
+            } else {
+                Value::F64(r.f64_le()?)
+            }
+        }
+        // Above `kCFNumberMaxType` there is no `CFNumberType`, so this is a
+        // record type Apple has added since — or a subtype byte somebody made
+        // up. Handed back untouched either way.
         _ => Value::Unknown { type_code, data },
     })
 }

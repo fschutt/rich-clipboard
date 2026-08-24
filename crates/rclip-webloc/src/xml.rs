@@ -147,8 +147,14 @@ impl<'a> Scanner<'a> {
         match self.next_tag() {
             Some(Ok(Tag::Close(n))) if n == name => Ok(text),
             Some(Err(e)) => Err(e),
-            // TODO(phase-4): CDATA sections and mixed content, if a real
-            // capture ever produces one.
+            // Still unimplemented, and still deliberately: CoreFoundation's
+            // XML writer escapes with entity references and never emits a
+            // CDATA section. Checked in phase 4 by handing `plutil -convert
+            // xml1` a string containing `&`, `<`, `>`, a quote and a literal
+            // `]]>`; every one came back as an entity. Accepting CDATA would
+            // add an unexercised branch to a parser whose input is written by
+            // another process, which is the wrong trade until a real capture
+            // needs it.
             _ => Err(Error::new(ErrorKind::Unsupported, start + lt)),
         }
     }

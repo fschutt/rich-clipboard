@@ -1,0 +1,8 @@
+{
+  "format": "FILEGROUPDESCRIPTORA",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "Two ANSI descriptors, 332 bytes each, FD_FILESIZE set on both",
+  "notes": "The ANSI twin of two-descriptors.bin. cFileName is 260 *bytes* here rather than 260 UTF-16 units, so a descriptor is 332 bytes not 592. Nothing in the payload says which layout it is -- the clipboard format name is the only thing that decides, which is why the crate refuses to sniff and why the corpus gate routes this directory on the sidecar's format rather than on the directory name. The second name carries 0xE9, which is e-acute in Windows-1252 and invalid UTF-8, so a reader that guesses UTF-8 fails visibly instead of quietly. FD_FILESIZE is set on both and the second size is 0, which is the documented way to promise a zero-length file rather than to say the size is unknown.",
+  "bytes": 668
+}

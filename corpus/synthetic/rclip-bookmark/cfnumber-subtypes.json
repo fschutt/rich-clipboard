@@ -1,0 +1,7 @@
+{
+  "format": "BookmarkData",
+  "origin": "synthetic",
+  "description": "One 0x03xx number record per CFNumberType subtype, including the width-ambiguous 10/14/15/16 in both their four- and eight-byte forms, plus a subtype past kCFNumberMaxType",
+  "expect": "ok",
+  "notes": "Fifteen records under keys 0xE001..0xE00F, in this order: 1 SInt8 (-1), 6 Float64 (1.25), 7 char (-1), 8 short (-32768), 9 int (-123456), 10 long as four bytes (-2), 10 long as eight bytes (-2), 11 long long (i64::MIN), 12 float (1.5), 13 double (-2.5), 14 CFIndex as eight bytes (9007199254740993, the first integer an f64 cannot hold), 15 NSInteger as four bytes (7), 16 CGFloat as eight bytes (0.5), 16 CGFloat as four bytes (0.25), and 17 - one past kCFNumberMaxType - which must come back as Value::Unknown rather than be guessed at. Subtypes 10, 14, 15 and 16 name a C or platform type whose width follows the writing process's data model, so each appears twice at the two widths: the record's own length field is what says which, and a decoder that assumes eight bytes reads the next record as the high half of this one. Hand-built rather than captured because CoreFoundation normalises every CFNumber to subtypes 1-6 when it encodes a bookmark, so no real capture contains one of these - the corefoundation-file.bin capture in this directory is what a real one looks like."
+}

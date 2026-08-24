@@ -1,0 +1,8 @@
+{
+  "format": "webloc",
+  "origin": "synthetic",
+  "description": "A resource fork whose header claims a resource map 4 KiB past the end of the buffer",
+  "expect": "error",
+  "error_kind": "BadMagic",
+  "notes": "rsrc-named-resources.bin with the header's map offset raised past EOF. Expected: ErrorKind::BadMagic, and the kind is the point of the fixture. Webloc::detect recognises a resource fork by checking that the header's four offsets and lengths agree with the buffer, because the format has no magic number; a header that does not agree means the bytes are not recognised as any of the three encodings, so the failure surfaces from the sniff as BadMagic rather than from the resource-fork reader as BadOffset. The fixtures either side of it - rsrc-type-list-past-map.bin and rsrc-data-offset-past-end.bin - are the cases that get past the sniff and fail inside."
+}

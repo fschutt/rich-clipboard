@@ -42,10 +42,12 @@
 //!
 //! PNG, JPEG and TIFF are deliberately out of scope, including the `BI_JPEG`
 //! and `BI_PNG` compression values that can technically appear in a DIB header.
-//! Those formats have good decoders already; these two do not. `BI_RLE4` and
-//! `BI_RLE8` are likewise unimplemented — nothing in a modern clipboard writes
-//! them — and are reported as [`ErrorKind::Unsupported`] rather than guessed
-//! at.
+//! Those formats have good decoders already; these two do not. Both are
+//! reported as [`ErrorKind::Unsupported`] rather than guessed at.
+//!
+//! Colour management is reported but never applied: [`DibHeader::color_space`],
+//! [`DibHeader::endpoints`] and [`DibHeader::gamma`] hand back what the producer
+//! wrote, and the pixels come out in whatever space they went in.
 //!
 //! [`ErrorKind::Unsupported`]: rclip_core::ErrorKind::Unsupported
 //!
@@ -75,16 +77,17 @@ pub mod encode;
 pub mod header;
 
 pub use decode::AlphaMode;
-pub use encode::{encode_v5_into, encoded_v5_len};
+pub use encode::{encode_dib_into, encode_v5_into, encoded_dib_len, encoded_v5_len, Flatten};
 pub use header::{
-    ChannelMask, DibHeader, HeaderVersion, Masks, BITMAPCOREHEADER_SIZE, BITMAPINFOHEADER_SIZE,
-    BITMAPV2INFOHEADER_SIZE, BITMAPV3INFOHEADER_SIZE, BITMAPV4HEADER_SIZE, BITMAPV5HEADER_SIZE,
-    BI_ALPHABITFIELDS, BI_BITFIELDS, BI_JPEG, BI_PNG, BI_RGB, BI_RLE4, BI_RLE8, LCS_CALIBRATED_RGB,
-    LCS_GM_IMAGES, LCS_SRGB, LCS_WINDOWS_COLOR_SPACE, PROFILE_EMBEDDED, PROFILE_LINKED,
+    ChannelMask, CieXyz, DibHeader, Endpoints, Gamma, HeaderVersion, Masks, BITMAPCOREHEADER_SIZE,
+    BITMAPINFOHEADER_SIZE, BITMAPV2INFOHEADER_SIZE, BITMAPV3INFOHEADER_SIZE, BITMAPV4HEADER_SIZE,
+    BITMAPV5HEADER_SIZE, BI_ALPHABITFIELDS, BI_BITFIELDS, BI_JPEG, BI_PNG, BI_RGB, BI_RLE4,
+    BI_RLE8, LCS_CALIBRATED_RGB, LCS_GM_IMAGES, LCS_SRGB, LCS_WINDOWS_COLOR_SPACE,
+    PROFILE_EMBEDDED, PROFILE_LINKED,
 };
 
 #[cfg(feature = "alloc")]
-pub use encode::encode_v5;
+pub use encode::{encode_dib, encode_v5};
 
 use rclip_core::Result;
 

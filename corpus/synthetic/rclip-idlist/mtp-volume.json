@@ -1,0 +1,7 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "MTP storage device volume, recognised by signature 0x10312005 at abID[4..8]",
+  "notes": "The class type indicator is 0x00, which means nothing; the item is identified by the signature four bytes in. The three string lengths count UTF-16 characters INCLUDING the terminator, so the byte count is twice each one."
+}

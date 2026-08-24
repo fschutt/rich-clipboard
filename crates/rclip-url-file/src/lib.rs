@@ -45,9 +45,10 @@ extern crate alloc;
 #[cfg(feature = "codepage")]
 pub mod codepage;
 pub mod fields;
+#[cfg(feature = "idlist")]
+pub mod idlist;
 pub mod ini;
 mod lines;
-pub mod shortcut;
 
 use rclip_core::{Error, ErrorKind, Reader, Result};
 
@@ -57,7 +58,20 @@ pub use ini::{Entries, Entry, Section, Sections};
 /// to its own manifest.
 #[cfg(feature = "codepage")]
 pub use rclip_codepage::Encoding;
-pub use shortcut::ShortcutTarget;
+/// Where a shortcut points, shared with every other member of the shortcut
+/// family.
+///
+/// Re-exported from [`rclip_core::shortcut`], which is where the canonical
+/// definition lives. Four crates used to carry a byte-identical copy of it, so
+/// a consumer holding two of them held two incompatible types for one concept;
+/// the module is re-exported whole so that `crate::shortcut::scheme` and
+/// `crate::shortcut::looks_like_path` still resolve here too.
+pub use rclip_core::shortcut;
+pub use rclip_core::ShortcutTarget;
+/// Re-exported so a caller that decoded `IDList=` can walk it without adding
+/// `rclip-idlist` to its own manifest.
+#[cfg(feature = "idlist")]
+pub use rclip_idlist::{display_path, ItemIdList, ShellItem};
 
 /// The section every `.url` has. Compared case-insensitively; see [`ini`].
 pub const SECTION_INTERNET_SHORTCUT: &str = "InternetShortcut";
@@ -268,11 +282,34 @@ impl<'a> UrlFile<'a> {
 
     /// `IDList=` — an encoded shell `ITEMIDLIST`, handed back as written.
     ///
-    /// Almost always empty in files on disk. Decoding it needs a PIDL parser.
-    //
-    // TODO(phase-3): decode through `rclip-idlist` once that crate exists.
+    /// Almost always empty in files on disk. The encoding is
+    /// `WritePrivateProfileStruct` hex plus a checksum byte; see the
+    /// [`idlist`](crate::idlist) module, and [`UrlFile::id_list_bytes`] for the
+    /// decoded form.
     #[must_use]
     pub fn id_list(&self) -> Option<&'a str> {
         self.key("IDList").map(|e| e.value)
+    }
+
+    /// `IDList=`, decoded to the `ITEMIDLIST` bytes it encodes.
+    ///
+    /// `None` when the key is absent; `Some(Ok(vec![]))` when it is present and
+    /// empty, which is the usual case. Walk the result with [`ItemIdList`].
+    ///
+    /// The bytes are a *name* in the shell namespace, not a path and not a
+    /// location. This crate does not resolve it and neither should you without
+    /// a policy — see [`rclip_idlist`].
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorKind::BadLength`] for an odd digit count, [`ErrorKind::Malformed`]
+    /// for a non-hex character or a checksum that does not match. Use
+    /// [`idlist::decode_no_checksum`](crate::idlist::decode_no_checksum) on the
+    /// raw value to accept a bad checksum deliberately.
+    #[cfg(feature = "idlist")]
+    #[must_use]
+    pub fn id_list_bytes(&self) -> Option<Result<alloc::vec::Vec<u8>>> {
+        self.key("IDList")
+            .map(|e| idlist::decode(e.value, e.offset))
     }
 }

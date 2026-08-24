@@ -1,0 +1,7 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "Users property view item with a KNOWNFOLDERID and an embedded property store",
+  "notes": "Signature 0x23FEBBEE is the one whose identifier is a KNOWNFOLDERID. The property store that follows is byte-identical in structure to a .lnk PropertyStoreDataBlock payload -- MS-PROPSTORE either way -- but rclip-idlist keeps it as raw bytes rather than depending on rclip-shell-link."
+}

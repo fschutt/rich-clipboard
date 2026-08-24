@@ -1,0 +1,13 @@
+{
+  "format": "webloc",
+  "origin": "captured",
+  "description": "The resource fork of a Finder-written .webloc: drag, TEXT and url resources, the pre-OS X form of an internet location file",
+  "expect": "ok",
+  "os": "macOS 15.5 (24F74)",
+  "app": "Finder",
+  "app_version": "system app; ships with the OS build above",
+  "how": "osascript -e 'tell application \"Finder\" to make new internet location file at POSIX file \"/private/tmp/\" to \"https://example.com/rich-clipboard\" with properties {name:\"Example Link\"}', then read the resource fork rather than the data fork: `cat '<file>/..namedfork/rsrc'`. The data fork of the same file is corpus/synthetic/rclip-webloc/finder-created.bin, whose sidecar recorded this fork's existence in phase 0 without capturing it - a resource fork is an extended attribute and does not survive git.",
+  "bytes": 474,
+  "redacted": false,
+  "notes": "A real Resource Manager fork, not a reconstruction: the bytes are exactly what Finder wrote, and `DeRez` on the original file lists the same three resources this parses - drag (128), TEXT (256), url (256). Both TEXT and url hold the URL; drag is the Drag Manager flavor list naming the other two. Nothing was scrubbed because nothing personal is in it: the URL and the file name are both arguments to the command above, the file was written in /private/tmp, and the only other content is the resource map's offsets. The reserved handle field of each reference entry holds 0x01000000/0x02000000/0x03000000, which is Resource Manager scratch and not machine state. Layout checked against Inside Macintosh: More Macintosh Toolbox, 'Resource File Format', and the Kaitai Struct resource_fork.ksy."
+}

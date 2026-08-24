@@ -1,0 +1,9 @@
+{
+  "format": "InternetShortcut",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "IDList= carrying a two-item PIDL: My Computer, then the Display control panel applet",
+  "notes": "The value is a WritePrivateProfileStruct blob -- two uppercase hex digits per byte, then one more byte holding the sum of the data bytes modulo 256. That is the same encoding Modified= uses, which is why its documented 'ninth checksum byte' is a checksum at all.",
+  "leak_allow": "HexRun",
+  "leak_allow_reason": "The long hex run IS the fixture: a hand-built PIDL in WritePrivateProfileStruct encoding. It decodes to a My Computer item and a control panel item and contains nothing from a real machine."
+}

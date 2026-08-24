@@ -14,6 +14,8 @@
 //! - [`LinkInfo`] — volume, serial number and drive-letter path, §2.3.
 //! - [`StringData`] — five optional counted strings, §2.4.
 //! - [`ExtraDataBlock`] — eleven self-describing trailing blocks, §2.5.
+//! - [`PropertyStore`] — the MS-PROPSTORE payload of one of them, where
+//!   `System.AppUserModel.ID` lives.
 //! - [`ShellLinkBuilder`] — writing one, behind the `alloc` feature.
 //!
 //! # This parser does not resolve anything
@@ -89,6 +91,8 @@ pub mod extra;
 pub mod filetime;
 pub mod header;
 pub mod link_info;
+pub mod propstore;
+pub mod shortcut;
 pub mod string_data;
 pub mod target;
 
@@ -104,6 +108,11 @@ pub use link_info::{
     CommonNetworkRelativeLink, CommonNetworkRelativeLinkFlags, DriveType, LinkInfo, LinkInfoFlags,
     NetworkProviderType, VolumeId,
 };
+pub use propstore::{
+    Properties, Property, PropertyName, PropertyStorage, PropertyStorages, PropertyStore,
+    PropertyValue,
+};
+pub use shortcut::{TargetCandidate, TargetCandidates, TargetSource};
 pub use string_data::StringData;
 pub use target::LinkTargetIdList;
 
@@ -113,6 +122,15 @@ pub use write::ShellLinkBuilder;
 /// Re-exported so callers do not need to depend on `rclip-idlist` directly just
 /// to name the type a string field comes back as.
 pub use rclip_idlist::ShellStr;
+
+/// Where a shortcut points, shared with every other member of the shortcut
+/// family — `.url`, `.webloc`, `.desktop` and `text/uri-list`.
+///
+/// The canonical definition lives in [`rclip_core::shortcut`]. This crate's own
+/// [`shortcut`] module re-exports it, along with `scheme` and
+/// `looks_like_path`, next to the `.lnk`-specific
+/// [`TargetCandidates`](shortcut::TargetCandidates). See [`ShellLink::target`].
+pub use rclip_core::ShortcutTarget;
 
 /// Re-exported for the same reason: naming the code page an ANSI `StringData`
 /// field is in should not need a second dependency in the caller's manifest.
@@ -201,6 +219,27 @@ impl<'a> ShellLink<'a> {
         self.extra_data()
             .map_while(Result::ok)
             .find(|b| b.signature() == signature)
+    }
+
+    /// The `PropertyStoreDataBlock`'s serialized property storage, if the link
+    /// carries one.
+    ///
+    /// MS-SHLLINK 2.5.7. Nothing inside is decoded until you walk it, so a link
+    /// with a malformed store still parses and this still returns it.
+    #[must_use]
+    pub fn property_store(&self) -> Option<PropertyStore<'a>> {
+        self.find_extra(extra::SIG_PROPERTY_STORE)?.property_store()
+    }
+
+    /// `System.AppUserModel.ID`, if the link declares one.
+    ///
+    /// This is the string Windows groups taskbar buttons by and hangs Jump
+    /// Lists off, and it is the only application identity a `.lnk` carries that
+    /// is not a file path. It is also entirely the writer's choice — see
+    /// [`PropertyStore::app_user_model_id`].
+    #[must_use]
+    pub fn app_user_model_id(&self) -> Option<ShellStr<'a>> {
+        self.property_store()?.app_user_model_id()
     }
 
     /// The `CodePage` from a `ConsoleFEDataBlock`, if the link carries one.

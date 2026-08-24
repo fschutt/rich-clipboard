@@ -46,7 +46,6 @@
 pub mod exec;
 mod lines;
 pub mod locale;
-pub mod shortcut;
 pub mod value;
 
 use rclip_core::{Error, ErrorKind, Reader, Result};
@@ -55,7 +54,16 @@ use lines::{Line, Lines};
 
 pub use exec::{ExecArg, ExecArgs, ExecCommand, ExecPiece, ExecPieces, FieldCode};
 pub use locale::Locale;
-pub use shortcut::ShortcutTarget;
+/// Where a shortcut points, shared with every other member of the shortcut
+/// family.
+///
+/// Re-exported from [`rclip_core::shortcut`], which is where the canonical
+/// definition lives. Four crates used to carry a byte-identical copy of it, so
+/// a consumer holding two of them held two incompatible types for one concept;
+/// the module is re-exported whole so that `crate::shortcut::scheme` and
+/// `crate::shortcut::looks_like_path` still resolve here too.
+pub use rclip_core::shortcut;
+pub use rclip_core::ShortcutTarget;
 pub use value::{ListItems, Unescape, Value};
 
 /// The group every desktop entry must have (§3.2).

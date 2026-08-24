@@ -1,0 +1,7 @@
+{
+  "format": "text/html",
+  "origin": "synthetic",
+  "description": "128 nested <div> elements, past rclip_core::MAX_DEPTH",
+  "expect": "error",
+  "notes": "Must return ErrorKind::DepthLimit rather than overflowing the stack. There is no recursion in the crate at all - the element stack is a fixed-size array and a loop - so this is a bound rather than a rescue."
+}

@@ -1,0 +1,7 @@
+{
+  "format": "InternetShortcut",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "IDList= with an odd number of hex digits",
+  "notes": "Five digits cannot be whole bytes. The file parses, so the fixture expects \"ok\"; UrlFile::id_list_bytes returns ErrorKind::BadLength."
+}

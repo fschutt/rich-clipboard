@@ -1,0 +1,8 @@
+{
+  "format": "webloc",
+  "origin": "synthetic",
+  "description": "A resource fork whose url resource points its data block past the end of the resource data area",
+  "expect": "error",
+  "error_kind": "BadOffset",
+  "notes": "rsrc-named-resources.bin with the url resource's 24-bit data offset set to 0xFFFFFF, against a data area of 60 bytes. Expected: ErrorKind::BadOffset. Header, map, type list and reference list are all sound, so this is the last offset in the format and the one furthest from the header - it is resolved only when a caller actually asks for the resource, which is why the fixture matters: a reader that validated the map and then trusted the reference entries would accept this."
+}

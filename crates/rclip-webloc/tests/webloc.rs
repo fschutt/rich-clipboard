@@ -259,3 +259,227 @@ fn to_string_lossy_matches_the_char_iterator() {
         assert_eq!(loc.url().to_string_lossy(), decode(loc.url()), "{name}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// The legacy resource-fork form
+// ---------------------------------------------------------------------------
+
+fn capture(name: &str) -> Vec<u8> {
+    let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/macos/finder/");
+    std::fs::read(format!("{p}{name}")).expect("capture")
+}
+
+#[test]
+fn the_captured_finder_resource_fork_holds_the_same_url_as_its_data_fork() {
+    // Same file on disk: `finder-created.bin` is its data fork and
+    // `webloc-resource-fork.bin` is its resource fork. Finder writes both, and
+    // they have to agree or one of the two readers is wrong.
+    let rsrc = capture("webloc-resource-fork.bin");
+    let loc = Webloc::parse(&rsrc).expect("a real Finder resource fork");
+
+    assert_eq!(loc.encoding(), Encoding::ResourceFork);
+    assert_eq!(decode(loc.url()), "https://example.com/rich-clipboard");
+    assert_eq!(
+        decode(loc.url()),
+        decode(Webloc::parse(&fixture("finder-created.bin")).unwrap().url()),
+        "the two forks of one file disagree"
+    );
+    assert!(
+        loc.url_name().is_none(),
+        "this form carries no title; Finder puts the name in the filename"
+    );
+}
+
+#[test]
+fn the_captured_fork_lists_the_three_resources_finder_writes() {
+    use rclip_webloc::{rsrc, ResourceFork};
+
+    let bytes = capture("webloc-resource-fork.bin");
+    let fork = ResourceFork::parse(&bytes).expect("a real Finder resource fork");
+
+    // Exactly what `DeRez` prints for the file this was cut from.
+    let types: Vec<_> = fork.types().map(|t| (t.code, t.count)).collect();
+    assert_eq!(
+        types,
+        vec![
+            (rsrc::TYPE_DRAG, 1),
+            (rsrc::TYPE_TEXT, 1),
+            (rsrc::TYPE_URL, 1)
+        ],
+        "the type list is sorted, and every count is stored minus one"
+    );
+
+    let url = fork.first_resource(rsrc::TYPE_URL).unwrap().unwrap();
+    assert_eq!(url.id, 256);
+    assert_eq!(url.name, None, "Finder names none of them");
+    assert!(!url.is_compressed());
+    assert_eq!(url.data, b"https://example.com/rich-clipboard");
+
+    // Finder writes the URL twice: once as `url `, once as `TEXT` so that
+    // dragging the file somewhere expecting text produces something useful.
+    let text = fork.first_resource(rsrc::TYPE_TEXT).unwrap().unwrap();
+    assert_eq!(text.data, url.data);
+
+    // And a `drag` resource naming the other two, which is where those four
+    // character codes appear a second time.
+    let drag = fork.first_resource(rsrc::TYPE_DRAG).unwrap().unwrap();
+    assert_eq!(drag.id, 128);
+    assert!(drag.data.windows(4).any(|w| w == rsrc::TYPE_URL));
+    assert!(drag.data.windows(4).any(|w| w == rsrc::TYPE_TEXT));
+}
+
+#[test]
+fn resource_names_and_negative_ids_come_back_intact() {
+    use rclip_webloc::{rsrc, ResourceFork};
+
+    let bytes = fixture("rsrc-named-resources.bin");
+    let fork = ResourceFork::parse(&bytes).expect("Rez output");
+
+    let url = fork.first_resource(rsrc::TYPE_URL).unwrap().unwrap();
+    assert_eq!(url.id, 128);
+    assert_eq!(url.name, Some(&b"Example destination"[..]));
+
+    let text = fork.first_resource(rsrc::TYPE_TEXT).unwrap().unwrap();
+    assert_eq!(
+        text.id, -16000,
+        "resource IDs are signed; reading this as a u16 gives 49536"
+    );
+    assert_eq!(text.name, Some(&b"Second name"[..]));
+
+    let loc = Webloc::parse(&bytes).expect("it has a url resource");
+    assert_eq!(decode(loc.url()), "https://example.com/legacy");
+}
+
+#[test]
+fn a_fork_without_a_url_resource_is_not_a_location_file() {
+    let bytes = fixture("rsrc-no-url-resource.bin");
+    assert_eq!(
+        Webloc::parse(&bytes).unwrap_err().kind,
+        ErrorKind::Malformed,
+        "the same answer a plist without a URL key gets"
+    );
+}
+
+#[test]
+fn a_header_that_does_not_agree_with_the_buffer_is_not_a_resource_fork_at_all() {
+    // The distinction the two fixtures exist for: recognising a resource fork
+    // *is* checking its header, so a header that lies means "not this format"
+    // rather than "this format, broken".
+    assert_eq!(
+        Webloc::parse(&fixture("rsrc-map-past-end.bin"))
+            .unwrap_err()
+            .kind,
+        ErrorKind::BadMagic
+    );
+    assert_eq!(
+        Webloc::detect(&fixture("rsrc-map-past-end.bin")),
+        None,
+        "and it is not mistaken for a plist either"
+    );
+    for name in [
+        "rsrc-type-list-past-map.bin",
+        "rsrc-data-offset-past-end.bin",
+    ] {
+        assert_eq!(
+            Webloc::detect(&fixture(name)),
+            Some(Encoding::ResourceFork),
+            "{name}: the header is sound, so the sniff has to accept it"
+        );
+        assert_eq!(
+            Webloc::parse(&fixture(name)).unwrap_err().kind,
+            ErrorKind::BadOffset,
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn no_plist_is_ever_read_as_a_resource_fork_and_no_fork_as_a_plist() {
+    for name in [
+        "finder-created.bin",
+        "finder-binary.bin",
+        "bplist-utf16.bin",
+        "xml-entities.bin",
+        "inetloc-urlname.bin",
+        "not-a-plist.bin",
+    ] {
+        assert_ne!(
+            Webloc::detect(&fixture(name)),
+            Some(Encoding::ResourceFork),
+            "{name} was sniffed as a resource fork"
+        );
+    }
+    assert_eq!(
+        Webloc::detect(&capture("webloc-resource-fork.bin")),
+        Some(Encoding::ResourceFork)
+    );
+}
+
+#[test]
+fn truncations_and_corruptions_of_a_resource_fork_never_panic() {
+    use rclip_webloc::ResourceFork;
+
+    for name in ["rsrc-named-resources.bin", "rsrc-no-url-resource.bin"] {
+        let bytes = fixture(name);
+        for len in 0..bytes.len() {
+            let _ = Webloc::parse(&bytes[..len]);
+            if let Ok(fork) = ResourceFork::parse(&bytes[..len]) {
+                for t in fork.types() {
+                    for r in t.resources() {
+                        let _ = r.map(|r| r.data.len());
+                    }
+                }
+            }
+        }
+    }
+
+    let bytes = capture("webloc-resource-fork.bin");
+    for i in 0..bytes.len() {
+        for patch in [0x00u8, 0x0F, 0x7F, 0xD1, 0xFF] {
+            let mut m = bytes.clone();
+            m[i] = patch;
+            if let Ok(loc) = Webloc::parse(&m) {
+                let _ = loc.url().chars().count();
+            }
+            if let Ok(fork) = ResourceFork::parse(&m) {
+                for t in fork.types() {
+                    for r in t.resources() {
+                        let _ = r.map(|r| r.data.len());
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn finder_info_tells_an_internet_location_file_from_anything_else() {
+    use rclip_webloc::is_internet_location_finder_info;
+
+    // Captured with `xattr -p com.apple.FinderInfo` on files Finder wrote for
+    // one URL of each scheme, on macOS 15.5.
+    for observed in [
+        b"ilhtMACS", // .webloc
+        b"ilftMACS", // .ftploc
+        b"ilmaMACS", // .mailloc
+        b"ilfiMACS", // .fileloc
+        b"ilafMACS", // .afploc
+        b"ilnwMACS", // .nntploc
+    ] {
+        let mut info = [0u8; 32];
+        info[..8].copy_from_slice(observed);
+        assert!(
+            is_internet_location_finder_info(&info),
+            "{:?}",
+            core::str::from_utf8(observed)
+        );
+    }
+
+    // A plain text clipping, and a type that is `il` with somebody else's
+    // creator code.
+    for other in [&b"clipTEXT"[..], b"ilhtXXXX", b"", b"ilht"] {
+        let mut info = [0u8; 32];
+        info[..other.len()].copy_from_slice(other);
+        assert!(!is_internet_location_finder_info(&info[..other.len()]));
+    }
+}

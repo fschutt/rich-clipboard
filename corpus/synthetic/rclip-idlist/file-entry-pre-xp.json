@@ -1,0 +1,7 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "A pre-Windows-XP file entry: two names back to back, no extension block",
+  "notes": "Nothing in the item says which layout it is. The u16 after the primary name would be an extension block's size on Windows XP and later; here it is the first two bytes of 'LONGNA~1.TXT', 0x4F4C = 20300, larger than the whole item -- which is exactly how libfwsi decides the item is pre-XP."
+}

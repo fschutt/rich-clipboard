@@ -88,6 +88,7 @@ pub mod dostime;
 pub mod guid;
 pub mod item;
 pub mod shell_item;
+pub mod signature;
 pub mod string;
 
 #[cfg(feature = "alloc")]
@@ -102,7 +103,11 @@ pub use item::{ItemId, ItemIdList, MIN_ITEM_SIZE};
 #[cfg(feature = "codepage")]
 pub use rclip_codepage::Encoding;
 pub use shell_item::{
-    ExtensionBlock, FileEntry, NetworkLocation, RootFolder, ShellItem, Uri, Volume,
+    ExtensionBlock, FileEntry, FtpData, NetworkLocation, RootFolder, ShellItem, Uri, Volume,
+};
+pub use signature::{
+    CompressedFolder, CompressedFolderVariant, ControlPanelItem, DelegateFolder, MtpFileEntry,
+    MtpVolume, UsersPropertyView,
 };
 #[cfg(feature = "codepage")]
 pub use string::ShellCharsWith;

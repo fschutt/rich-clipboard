@@ -23,9 +23,9 @@ pub const BITMAPV5HEADER_SIZE: u32 = 124;
 
 /// `biCompression`: uncompressed, channel layout implied by `biBitCount`.
 pub const BI_RGB: u32 = 0;
-/// 8-bpp run-length encoding. Not implemented.
+/// 8-bpp run-length encoding. Valid only with `biBitCount == 8`.
 pub const BI_RLE8: u32 = 1;
-/// 4-bpp run-length encoding. Not implemented.
+/// 4-bpp run-length encoding. Valid only with `biBitCount == 4`.
 pub const BI_RLE4: u32 = 2;
 /// Uncompressed, channel layout given by explicit DWORD masks.
 pub const BI_BITFIELDS: u32 = 3;
@@ -50,6 +50,79 @@ pub const PROFILE_EMBEDDED: u32 = 0x4D42_4544;
 
 /// `bV5Intent` = perceptual. What an image (as opposed to a chart) wants.
 pub const LCS_GM_IMAGES: u32 = 4;
+
+/// One CIE 1931 XYZ colour from a `CIEXYZTRIPLE`, in `FXPT2DOT30` fixed point.
+///
+/// `FXPT2DOT30` is a signed 32-bit fixed-point number with two integer bits and
+/// thirty fraction bits, so the raw value divided by `2^30` is the number the
+/// producer meant. The fields are kept raw because that is what was on the
+/// wire; [`CieXyz::to_f32`] does the division.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Hash)]
+pub struct CieXyz {
+    /// `ciexyzX`.
+    pub x: i32,
+    /// `ciexyzY`.
+    pub y: i32,
+    /// `ciexyzZ`.
+    pub z: i32,
+}
+
+impl CieXyz {
+    /// The three components as ordinary numbers, `raw / 2^30`.
+    #[must_use]
+    pub fn to_f32(self) -> (f32, f32, f32) {
+        (fxpt2dot30(self.x), fxpt2dot30(self.y), fxpt2dot30(self.z))
+    }
+}
+
+/// `bV4Endpoints` / `bV5Endpoints`: the `CIEXYZTRIPLE` at bytes 60..96.
+///
+/// Reported, never applied. See [`DibHeader::endpoints`] for why.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Hash)]
+pub struct Endpoints {
+    /// `ciexyzRed`.
+    pub red: CieXyz,
+    /// `ciexyzGreen`.
+    pub green: CieXyz,
+    /// `ciexyzBlue`.
+    pub blue: CieXyz,
+}
+
+/// `bV4GammaRed`/`Green`/`Blue`: the three `DWORD`s at bytes 96..108.
+///
+/// Each is unsigned 16.16 fixed point, so the raw value divided by `65536` is
+/// the gamma the producer meant. A typical `2.2` arrives as `0x0002_3333`.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Hash)]
+pub struct Gamma {
+    /// `bV4GammaRed`, raw 16.16.
+    pub red: u32,
+    /// `bV4GammaGreen`, raw 16.16.
+    pub green: u32,
+    /// `bV4GammaBlue`, raw 16.16.
+    pub blue: u32,
+}
+
+impl Gamma {
+    /// The three curves as ordinary numbers, `raw / 65536`.
+    #[must_use]
+    pub fn to_f32(self) -> (f32, f32, f32) {
+        (
+            fixed16_16(self.red),
+            fixed16_16(self.green),
+            fixed16_16(self.blue),
+        )
+    }
+}
+
+/// `FXPT2DOT30` — two integer bits, thirty fraction bits.
+fn fxpt2dot30(raw: i32) -> f32 {
+    raw as f32 / (1u32 << 30) as f32
+}
+
+/// Unsigned 16.16 fixed point, as `bV4GammaRed` and friends use.
+fn fixed16_16(raw: u32) -> f32 {
+    raw as f32 / 65536.0
+}
 
 /// Which information header the payload actually carries.
 ///
@@ -278,7 +351,10 @@ pub struct DibHeader {
     clr_used: u32,
     clr_important: u32,
     color_space: u32,
+    endpoints: Endpoints,
+    gamma: Gamma,
     masks: Masks,
+    rle: bool,
     palette_offset: usize,
     palette_entries: u32,
     pixel_offset: usize,
@@ -352,12 +428,10 @@ impl DibHeader {
         }
 
         match compression {
-            BI_RGB | BI_BITFIELDS | BI_ALPHABITFIELDS => {}
-            // TODO(phase-1): BI_RLE4/BI_RLE8 if a real capture ever shows one.
-            // Nothing in a modern clipboard writes RLE.
-            BI_RLE8 | BI_RLE4 | BI_JPEG | BI_PNG => {
-                return Err(Error::new(ErrorKind::Unsupported, 16))
-            }
+            BI_RGB | BI_BITFIELDS | BI_ALPHABITFIELDS | BI_RLE8 | BI_RLE4 => {}
+            // An embedded JPEG or PNG stream in a DIB wrapper. Out of scope on
+            // purpose: those formats have good decoders already.
+            BI_JPEG | BI_PNG => return Err(Error::new(ErrorKind::Unsupported, 16)),
             // Anything else is a video FOURCC (the DirectShow reuse of this
             // struct), which is not a bitmap at all.
             _ => return Err(Error::new(ErrorKind::Unsupported, 16)),
@@ -367,6 +441,33 @@ impl DibHeader {
             1 | 4 | 8 | 16 | 24 | 32 => {}
             // 0 is only legal with BI_JPEG/BI_PNG, which are already rejected.
             _ => return Err(Error::new(ErrorKind::Unsupported, 14)),
+        }
+
+        // "The BI_RLE8 value is valid only for 8-bpp bitmaps", likewise
+        // BI_RLE4 and 4-bpp. The pairing is not a formality: the run grammars
+        // differ, and reading an RLE4 stream as RLE8 walks a different number
+        // of pixels per byte and desynchronises immediately.
+        let rle = match compression {
+            BI_RLE8 => {
+                if bit_count != 8 {
+                    return Err(Error::new(ErrorKind::Malformed, 14));
+                }
+                true
+            }
+            BI_RLE4 => {
+                if bit_count != 4 {
+                    return Err(Error::new(ErrorKind::Malformed, 14));
+                }
+                true
+            }
+            _ => false,
+        };
+        if rle && top_down {
+            // MS-WMF and the GDI docs both say it, in the same words: a
+            // top-down DIB cannot be compressed. The run grammar has no way to
+            // express which end it started from, so an encoder that set both
+            // is contradicting itself and the rows would come out inverted.
+            return Err(Error::new(ErrorKind::Malformed, 8));
         }
 
         let bitfields = compression == BI_BITFIELDS || compression == BI_ALPHABITFIELDS;
@@ -406,18 +507,39 @@ impl DibHeader {
             }
         }
 
-        let color_space = if version >= HeaderVersion::V4 {
-            // bV4CSType / bV5CSType sit at offset 56, immediately after the
-            // four masks.
-            //
-            // TODO(phase-2): the endpoints (60..96), gamma (96..108) and, for
-            // V5, the ICC profile at bV5ProfileData (112) are read past but not
-            // reported. Nothing downstream does colour management yet, and a
-            // half-applied transform is worse than none; the field is exposed
-            // via `color_space()` so a caller can at least see what it is.
-            r.u32_le()?
+        // bV4CSType / bV5CSType sits at offset 56, immediately after the four
+        // masks, and is followed by the colour-management block: a
+        // CIEXYZTRIPLE at 60..96 and three gamma DWORDs at 96..108.
+        //
+        // TODO(phase-2): the V5 ICC profile — bV5ProfileData (112) and
+        // bV5ProfileSize (116) — is read past but not reported. It is a byte
+        // range elsewhere in the payload rather than a value, and resolving it
+        // means handing a caller an offset that came off the wire.
+        let (color_space, endpoints, gamma) = if version >= HeaderVersion::V4 {
+            let cs = r.u32_le()?;
+            let mut xyz = [CieXyz::default(); 3];
+            for slot in &mut xyz {
+                slot.x = r.i32_le()?;
+                slot.y = r.i32_le()?;
+                slot.z = r.i32_le()?;
+            }
+            let g = Gamma {
+                red: r.u32_le()?,
+                green: r.u32_le()?,
+                blue: r.u32_le()?,
+            };
+            debug_assert_eq!(r.pos(), BITMAPV4HEADER_SIZE as usize);
+            (
+                cs,
+                Endpoints {
+                    red: xyz[0],
+                    green: xyz[1],
+                    blue: xyz[2],
+                },
+                g,
+            )
         } else {
-            LCS_CALIBRATED_RGB
+            (LCS_CALIBRATED_RGB, Endpoints::default(), Gamma::default())
         };
 
         let mut masks = if bitfields {
@@ -473,26 +595,50 @@ impl DibHeader {
             .checked_add(palette_bytes)
             .ok_or(Error::new(ErrorKind::TooLarge, 32))?;
 
-        // Rows are padded to a 4-byte boundary. This is the off-by-one that
-        // skews an image diagonally instead of failing: at 24 bpp a 3-pixel row
-        // is 9 bytes of colour but 12 bytes on the wire.
-        let stride_u64 = (u64::from(width) * u64::from(bit_count)).div_ceil(32) * 4;
-        let image_bytes_u64 = stride_u64 * u64::from(height);
-        let stride = usize::try_from(stride_u64).map_err(|_| Error::new(ErrorKind::TooLarge, 4))?;
-        let image_bytes =
-            usize::try_from(image_bytes_u64).map_err(|_| Error::new(ErrorKind::TooLarge, 4))?;
-
         // Bounds-check the whole layout once, here, so the decoder never has to.
         let avail = src.len().checked_sub(pixel_offset).ok_or(Error::new(
             ErrorKind::BadOffset,
             pixel_offset.min(src.len()),
         ))?;
-        if image_bytes > avail {
-            // Truncated payload. Some producers omit the final row's padding;
-            // this decoder does not paper over that, because the alternative is
-            // emitting a partly uninitialised last row.
-            return Err(Error::new(ErrorKind::UnexpectedEof, src.len()));
-        }
+
+        let (stride, image_bytes) = if rle {
+            // A run-length stream has no fixed row stride at all, so there is
+            // no `stride * height` to derive: the only statement of how many
+            // bytes belong to the image is `biSizeImage`, which the docs make
+            // mandatory for BI_RLE4/BI_RLE8 for exactly this reason.
+            //
+            // Zero is nonetheless common from producers that copied the
+            // "may be zero for BI_RGB" rule across, so it is read as "the rest
+            // of the payload" rather than as an empty image. A non-zero value
+            // that does not fit is a truncated payload, not something to clamp:
+            // the decoder would stop mid-run and emit a half-drawn image.
+            let declared =
+                usize::try_from(size_image).map_err(|_| Error::new(ErrorKind::TooLarge, 20))?;
+            if declared == 0 {
+                (0, avail)
+            } else if declared > avail {
+                return Err(Error::new(ErrorKind::UnexpectedEof, src.len()));
+            } else {
+                (0, declared)
+            }
+        } else {
+            // Rows are padded to a 4-byte boundary. This is the off-by-one that
+            // skews an image diagonally instead of failing: at 24 bpp a 3-pixel
+            // row is 9 bytes of colour but 12 bytes on the wire.
+            let stride_u64 = (u64::from(width) * u64::from(bit_count)).div_ceil(32) * 4;
+            let image_bytes_u64 = stride_u64 * u64::from(height);
+            let stride =
+                usize::try_from(stride_u64).map_err(|_| Error::new(ErrorKind::TooLarge, 4))?;
+            let image_bytes =
+                usize::try_from(image_bytes_u64).map_err(|_| Error::new(ErrorKind::TooLarge, 4))?;
+            if image_bytes > avail {
+                // Truncated payload. Some producers omit the final row's
+                // padding; this decoder does not paper over that, because the
+                // alternative is emitting a partly uninitialised last row.
+                return Err(Error::new(ErrorKind::UnexpectedEof, src.len()));
+            }
+            (stride, image_bytes)
+        };
 
         // Post-guard arithmetic: pixel_count is already <= MAX_PIXELS, so this
         // cannot exceed 4 * MAX_PIXELS on any target with a 32-bit usize.
@@ -512,7 +658,10 @@ impl DibHeader {
             clr_used,
             clr_important,
             color_space,
+            endpoints,
+            gamma,
             masks,
+            rle,
             palette_offset,
             palette_entries,
             pixel_offset,
@@ -602,11 +751,56 @@ impl DibHeader {
         self.color_space
     }
 
+    /// `bV4Endpoints`/`bV5Endpoints`, the `CIEXYZTRIPLE` at bytes 60..96, for
+    /// a header that has one. `None` below [`HeaderVersion::V4`].
+    ///
+    /// **Reported, never applied.** The endpoints and [`Self::gamma`] together
+    /// describe the RGB primaries the producer's pixels are in, and are only
+    /// *meaningful* when [`Self::color_space`] is [`LCS_CALIBRATED_RGB`] —
+    /// every other value names a colour space that supersedes them. This crate
+    /// deliberately performs no conversion: a clipboard decoder that
+    /// half-applies a colour transform produces pixels that are wrong in a way
+    /// nothing downstream can detect or undo, whereas passing them through
+    /// unchanged leaves a caller with an ICC-shaped problem it can still solve.
+    #[must_use]
+    pub const fn endpoints(self) -> Option<Endpoints> {
+        match self.version {
+            HeaderVersion::V4 | HeaderVersion::V5 => Some(self.endpoints),
+            _ => None,
+        }
+    }
+
+    /// `bV4GammaRed`/`Green`/`Blue`, the three 16.16 `DWORD`s at bytes 96..108,
+    /// for a header that has them. `None` below [`HeaderVersion::V4`].
+    ///
+    /// Reported, never applied — see [`Self::endpoints`].
+    #[must_use]
+    pub const fn gamma(self) -> Option<Gamma> {
+        match self.version {
+            HeaderVersion::V4 | HeaderVersion::V5 => Some(self.gamma),
+            _ => None,
+        }
+    }
+
+    /// Whether [`Self::endpoints`] and [`Self::gamma`] describe this image, i.e.
+    /// `bV5CSType == LCS_CALIBRATED_RGB` on a header that carries them.
+    #[must_use]
+    pub const fn is_calibrated(self) -> bool {
+        self.color_space == LCS_CALIBRATED_RGB && self.endpoints().is_some()
+    }
+
     /// The channel masks in effect, whether they were read from the header,
     /// from the DWORDs following it, or defaulted from the bit depth.
     #[must_use]
     pub const fn masks(self) -> Masks {
         self.masks
+    }
+
+    /// Whether the pixel data is a [`BI_RLE4`] or [`BI_RLE8`] run-length stream
+    /// rather than packed rows.
+    #[must_use]
+    pub const fn is_rle(self) -> bool {
+        self.rle
     }
 
     /// Number of `RGBQUAD` entries between the header and the pixels.
@@ -628,12 +822,18 @@ impl DibHeader {
     }
 
     /// Bytes per stored row, including the pad to a 4-byte boundary.
+    ///
+    /// **Zero for an RLE image**, which has no fixed row stride: a compressed
+    /// row is whatever length its runs came to. Zero rather than the stride the
+    /// *decoded* rows would have, so that arithmetic written for the packed
+    /// case cannot quietly produce a plausible wrong answer here.
     #[must_use]
     pub const fn stride(self) -> usize {
         self.stride
     }
 
-    /// Total bytes of pixel data, `stride * height`.
+    /// Total bytes of pixel data: `stride * height` for a packed image, and the
+    /// length of the compressed stream for an RLE one.
     #[must_use]
     pub const fn image_bytes(self) -> usize {
         self.image_bytes

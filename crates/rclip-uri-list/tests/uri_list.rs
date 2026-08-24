@@ -374,6 +374,251 @@ fn decoding_to_a_string_fails_loudly_on_a_non_utf8_path() {
     );
 }
 
+// -------------------------------------------------------- percent-encoding
+
+#[test]
+fn the_path_encode_set_is_rfc_3986_pchar_plus_slash() {
+    use rclip_uri_list::EncodeSet;
+
+    // `pchar = unreserved / pct-encoded / sub-delims / ":" / "@"`, plus the
+    // separator. This is also, byte for byte, GLib's
+    // G_URI_RESERVED_CHARS_ALLOWED_IN_PATH, which is what g_filename_to_uri
+    // escapes with — matching it is what lets the receiving side compare URIs.
+    for b in b"-._~!$&'()*+,;=:@/" {
+        assert!(
+            EncodeSet::Path.allows(*b),
+            "{:?} is legal in a path and escaping it is over-encoding",
+            *b as char
+        );
+    }
+    for b in b" \"#%<>?[]\\^`{|}" {
+        assert!(
+            !EncodeSet::Path.allows(*b),
+            "{:?} changes what the URI means and must be escaped",
+            *b as char
+        );
+    }
+    // Control bytes and everything non-ASCII.
+    assert!(!EncodeSet::Path.allows(0x00));
+    assert!(!EncodeSet::Path.allows(0x1F));
+    assert!(!EncodeSet::Path.allows(0x7F));
+    assert!(!EncodeSet::Path.allows(0xC3));
+
+    // A segment is a pchar run with no separator in it.
+    assert!(!EncodeSet::Segment.allows(b'/'));
+    assert!(EncodeSet::Segment.allows(b'&'));
+
+    // Unreserved keeps only the four punctuation marks §2.3 names.
+    for b in b"-._~" {
+        assert!(EncodeSet::Unreserved.allows(*b));
+    }
+    for b in b"!$&'()*+,;=:@/" {
+        assert!(!EncodeSet::Unreserved.allows(*b));
+    }
+}
+
+#[test]
+fn a_literal_percent_is_never_left_alone() {
+    use rclip_uri_list::EncodeSet;
+
+    // The one byte where getting it wrong silently corrupts a filename: leave
+    // it and the next reader takes the two bytes after it for an escape.
+    for set in [EncodeSet::Path, EncodeSet::Segment, EncodeSet::Unreserved] {
+        assert!(!set.allows(b'%'), "{set:?} must escape a literal %");
+    }
+}
+
+#[test]
+fn encoding_allocates_nothing_and_yields_ascii() {
+    use core::fmt::Write as _;
+    use rclip_uri_list::{percent_encode, EncodeSet};
+
+    let enc = percent_encode(b"/tmp/a b\xffc", EncodeSet::Path);
+    // `PercentEncode` is `Copy`, so each of these consumes its own copy.
+    assert!(
+        { enc }.all(|b| b.is_ascii()),
+        "the output has to be embeddable in a &str"
+    );
+    // `encoded_len` has to agree with what the iterator actually produces.
+    assert_eq!(
+        rclip_uri_list::uri::encoded_len(b"/tmp/a b\xffc", EncodeSet::Path),
+        { enc }.count()
+    );
+
+    // Display straight into a fmt::Write, no allocator involved.
+    let mut sink = String::new();
+    write!(sink, "{enc}").unwrap();
+    assert_eq!(sink, "/tmp/a%20b%FFc");
+}
+
+#[test]
+fn hex_digits_are_uppercase() {
+    use rclip_uri_list::{percent_encode, EncodeSet};
+
+    // RFC 3986 §2.1 says "should use uppercase", and GLib, Qt and Chromium all
+    // do — a lowercase escape is a textual mismatch for a reader that compares
+    // URIs without normalising them.
+    let s = percent_encode(b"\xab\xcd \x0a", EncodeSet::Path).to_string();
+    assert_eq!(s, "%AB%CD%20%0A");
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn a_path_becomes_the_uri_glib_would_have_produced() {
+    use rclip_uri_list::emit::file_uri;
+
+    assert_eq!(file_uri("/home/me/notes.txt"), "file:///home/me/notes.txt");
+    assert_eq!(
+        file_uri("/home/me/a file.txt"),
+        "file:///home/me/a%20file.txt"
+    );
+    // The under-encoding trap: an unescaped `#` makes the rest a fragment, so
+    // the file would arrive as `/tmp/notes`.
+    assert_eq!(file_uri("/tmp/notes#2.txt"), "file:///tmp/notes%232.txt");
+    assert_eq!(file_uri("/tmp/q?.txt"), "file:///tmp/q%3F.txt");
+    // A literal percent must double.
+    assert_eq!(file_uri("/tmp/100%.txt"), "file:///tmp/100%25.txt");
+    // The over-encoding trap: sub-delims are legal and must stay literal.
+    assert_eq!(
+        file_uri("/tmp/it's (1)&2,3;4=5+6!7$8*9@a:b.txt"),
+        "file:///tmp/it's%20(1)&2,3;4=5+6!7$8*9@a:b.txt"
+    );
+    // Non-UTF-8 bytes survive, because a POSIX path is a byte string.
+    assert_eq!(file_uri(&b"/tmp/\xff.bin"[..]), "file:///tmp/%FF.bin");
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn a_path_without_a_leading_slash_does_not_become_a_hostname() {
+    use rclip_uri_list::emit::file_uri;
+
+    // `file://home/me` parses `home` as an authority, which is the one
+    // malformation that changes what the URI *means* rather than how it looks.
+    let uri = file_uri("home/me/x.txt");
+    assert_eq!(uri, "file:///home/me/x.txt");
+
+    let list = parse(uri.as_bytes()).unwrap();
+    let f = list.first().unwrap().as_file().unwrap();
+    assert!(f.host().is_empty(), "the authority must stay empty");
+    assert_eq!(f.path(), "/home/me/x.txt");
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn every_encoded_path_round_trips_through_the_decoder() {
+    use rclip_uri_list::emit::file_uri;
+
+    let paths: &[&[u8]] = &[
+        b"/home/me/plain.txt",
+        b"/home/me/a file with spaces.txt",
+        b"/tmp/hash#and?query&amp.txt",
+        b"/tmp/100% sure.txt",
+        b"/tmp/\xff\xfe not utf-8",
+        b"/tmp/[brackets]{braces}.txt",
+        b"/tmp/back\\slash.txt",
+        b"/tmp/\x01control.txt",
+        b"/tmp/caf\xc3\xa9.txt",
+    ];
+    for path in paths {
+        let uri = file_uri(path);
+        let list = parse(uri.as_bytes()).expect("an encoded URI must be UTF-8");
+        list.validate_percent_encoding()
+            .unwrap_or_else(|e| panic!("{uri} does not validate: {e}"));
+        let u = list.first().unwrap();
+        assert_eq!(
+            u.to_decoded_bytes().unwrap(),
+            [b"file://".as_slice(), path].concat(),
+            "{uri} did not decode back to the path it came from"
+        );
+        // And through the part a caller actually uses.
+        let f = u.as_file().unwrap();
+        assert!(f.is_local());
+        let decoded: Vec<u8> = parse(f.path().as_bytes())
+            .unwrap()
+            .first()
+            .unwrap()
+            .to_decoded_bytes()
+            .unwrap();
+        assert_eq!(decoded, path.to_vec());
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn an_encoded_path_survives_a_whole_uri_list_and_a_gnome_payload() {
+    use rclip_uri_list::emit::{self as e, file_uri};
+
+    let paths = ["/tmp/a b.txt", "/tmp/c#d.txt"];
+    let encoded: Vec<String> = paths.iter().map(file_uri).collect();
+    let refs: Vec<&str> = encoded.iter().map(String::as_str).collect();
+
+    assert_eq!(uris(&e::write_uri_list(refs.iter().copied())), refs);
+
+    let bytes = e::write_copied_files(FileAction::Cut, refs.iter().copied());
+    let cf = parse_copied_files(&bytes).unwrap();
+    assert_eq!(cf.action(), FileAction::Cut);
+    assert_eq!(cf.uris().map(|u| u.as_str()).collect::<Vec<_>>(), refs);
+    assert!(
+        !bytes.windows(1).any(|w| w == b" "),
+        "an unencoded space is what makes g_uri_is_valid reject the payload"
+    );
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn encoding_a_uri_that_is_already_one_would_double_its_escapes() {
+    use rclip_uri_list::{percent_encode_to_string, EncodeSet};
+
+    // Why `write_uri_list` passes URIs through verbatim rather than escaping
+    // them: this is what the alternative does.
+    assert_eq!(
+        percent_encode_to_string(b"file:///tmp/a%20b.txt", EncodeSet::Path),
+        "file:///tmp/a%2520b.txt"
+    );
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn the_reserved_set_fixture_decodes_back_to_the_paths_it_names() {
+    use rclip_uri_list::emit::file_uri;
+
+    // Hand-written to the RFC rather than generated here, so this is a real
+    // check on the encoder and not a restatement of it.
+    let bytes = fixture("encoded-reserved-chars.bin");
+    let list = parse(&bytes).unwrap();
+    list.validate_percent_encoding().unwrap();
+
+    let want: &[&[u8]] = &[
+        b"/tmp/a file.txt",
+        b"/tmp/notes#2.txt",
+        b"/tmp/100%.txt",
+        b"/tmp/it's (1)&2,3;4=5+6!7$8*9@a:b.txt",
+        b"/tmp/\xff.bin",
+        b"/tmp/caf\xc3\xa9.txt",
+    ];
+    let got: Vec<Vec<u8>> = list
+        .uris()
+        .map(|u| {
+            let path = u.as_file().unwrap().path();
+            parse(path.as_bytes())
+                .unwrap()
+                .first()
+                .unwrap()
+                .to_decoded_bytes()
+                .unwrap()
+        })
+        .collect();
+    assert_eq!(got, want.to_vec());
+
+    // And the encoder reproduces the fixture byte for byte.
+    let rebuilt: Vec<String> = want.iter().map(file_uri).collect();
+    assert_eq!(
+        rclip_uri_list::emit::write_uri_list(rebuilt.iter().map(String::as_str)),
+        bytes,
+        "this crate must produce exactly the bytes the RFC-derived fixture holds"
+    );
+}
+
 // ---------------------------------------------------------------- sidecars
 
 /// Read `"expect"` out of a sidecar without a JSON dependency. The sidecars are
@@ -453,7 +698,7 @@ fn every_fixture_matches_its_sidecar() {
         }
     }
     assert_eq!(
-        seen, 13,
+        seen, 14,
         "a new fixture needs a test that says what it means"
     );
 }

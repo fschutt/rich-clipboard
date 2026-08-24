@@ -1,0 +1,8 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "2x2 BI_RLE8 with a third encoded run after both rows are already complete",
+  "expect": "error",
+  "error_kind": "Malformed",
+  "notes": "Two full rows and two end-of-line escapes leave the cursor one row above the top of the bitmap. The third run claims a row the bitmap does not have."
+}

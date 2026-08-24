@@ -84,23 +84,54 @@ INI crate reproduces.
 
 ## The shared shortcut type
 
-`ShortcutTarget<'a>` — `Url` / `Path` / `Unresolved` — lives here. `.url`, `.webloc`, `.desktop`
-(`Type=Link`) and macOS `BookmarkData` are four spellings of one idea, and `plan/PLAN.md` §4.10
-unifies them in Phase 4; this crate is the family's smallest member, so nothing has to depend on
-anything larger to get at the type. `rclip-desktop-entry` and `rclip-uri-list` carry byte-identical
-mirrors, because codec crates in this workspace do not depend on each other.
+`ShortcutTarget<'a>` — `Url` / `Path` / `Unresolved` — is `rclip_core::shortcut::ShortcutTarget`,
+re-exported here as `rclip_url_file::ShortcutTarget` (and the whole `shortcut` module with it, so
+`shortcut::scheme` and `shortcut::looks_like_path` still resolve). `.url`, `.webloc`, `.desktop`
+(`Type=Link`), `.lnk` and `text/uri-list` are five spellings of one idea, and `plan/PLAN.md` §4.10
+unifies them.
 
-`// TODO(phase-4):` hoist it into `rclip-core` and delete the mirrors.
+Until Phase 4 this crate *owned* the definition and `rclip-desktop-entry` and `rclip-uri-list`
+carried byte-identical mirrors, because codec crates in this workspace do not depend on each other.
+They all depend on `rclip-core`, which is where the one copy now lives; the mirrors are gone.
 
 Classification order is the whole correctness of `ShortcutTarget::classify`: `C:\Users\me` is a
 *syntactically valid* RFC 3986 reference with scheme `C`, so the drive-letter and UNC tests run
 before the scheme test. Otherwise every Windows path on the clipboard becomes a URL with a
 one-letter scheme.
 
+## `IDList=` (the `idlist` feature)
+
+**Done** — was `// TODO(phase-3)`. Off by default; it implies `alloc` and pulls in `rclip-idlist`.
+
+The value is not plain hex. It is what `WritePrivateProfileStruct` writes: two uppercase hex
+digits per byte and then **one more byte holding the sum of the data bytes modulo 256**, which
+`GetPrivateProfileStruct` verifies before handing the value back. Wine's
+`dlls/kernel32/profile.c` implements both halves.
+
+That is not inferred from the shape of the string — it is the same encoding `Modified=` uses, and
+it is what makes the trailing byte of the unofficial guide's own example come out right:
+`Modified=20F06BA06D07BD014D`, and `0x20+0xF0+0x6B+0xA0+0x6D+0x07+0xBD+0x01 = 0x34D`, low byte
+`0x4D`. The guide calls that byte "a checksum" without saying what it checksums; this is what.
+
+```rust
+let f = rclip_url_file::parse(bytes)?;
+let pidl = f.id_list_bytes().transpose()?;             // Option<Vec<u8>>
+for item in ItemIdList::new(pidl.as_deref().unwrap_or_default()) { /* … */ }
+```
+
+`None` means the key is absent; `Some(Ok(vec![]))` means it is present and empty, which is what
+almost every `.url` on disk carries. A bad checksum is `ErrorKind::Malformed` — Windows refuses it
+too, and a wrong checksum usually means the value was truncated, which turns into a PIDL that
+parses to confident nonsense. `idlist::decode_no_checksum` takes it anyway, deliberately and by
+name. A non-hex digit is refused rather than folded to a number: Wine's `get_hex_byte` accepts
+`g`..`z` and gives them values above 15, which produces bytes nobody wrote.
+
+Decoding allocates because hex digits are not bytes — the PIDL is not a contiguous slice of the
+file and cannot be borrowed from it — which is the whole reason this is a feature and not always
+on. Fixtures: `idlist-pidl.bin`, `idlist-bad-checksum.bin`, `idlist-odd-digits.bin`.
+
 ## Not implemented yet
 
-- `// TODO(phase-3):` `IDList=` is returned as written. Decoding it needs a PIDL parser; it will go
-  through `rclip-idlist` once that crate exists. In files on disk it is almost always empty.
 - Auto-detecting the code page of a legacy file. `parse()` still requires UTF-8, and the
   `codepage` feature transcodes only when the caller names an encoding. Sniffing one is out of
   scope: see the `rclip-codepage` README.

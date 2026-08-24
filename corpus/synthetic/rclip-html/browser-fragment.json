@@ -1,0 +1,7 @@
+{
+  "format": "text/html",
+  "origin": "synthetic",
+  "description": "What a browser actually puts on the clipboard: a <style> block, pretty-printed indentation, a class that carries styling this crate cannot see, and entities",
+  "expect": "ok",
+  "notes": "Decodes to 'The quick brown fox jumps over the lazy dog.\\nCafé - naive - 50%' with the accents intact - the indentation and the newlines inside the paragraphs collapse to single spaces, and the <style> block's text is not text. p.x{color:green} is NOT applied: there is no cascade, which is the documented ceiling."
+}

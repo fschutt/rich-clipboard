@@ -1,0 +1,8 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "255x1 BI_RLE8 with an absolute run claiming 255 literal bytes and supplying four",
+  "expect": "error",
+  "error_kind": "UnexpectedEof",
+  "notes": "The run fits the row, so the width check passes and the length check is the only thing left. Must be ErrorKind::UnexpectedEof from the bounded read, not a slice past the end."
+}

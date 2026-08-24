@@ -1,8 +1,10 @@
 //! `CF_DIB` / `CF_DIBV5` pixel decoding — `rclip_dib::decode`.
 //!
-//! Where `dib_header` stops at validation, this one walks every row: RLE is not
-//! implemented but bit-field extraction, palette indexing and premultiplied
-//! alpha all index derived offsets per pixel.
+//! Where `dib_header` stops at validation, this one walks every row: bit-field
+//! extraction, palette indexing and premultiplied alpha all index derived
+//! offsets per pixel, and `BI_RLE4`/`BI_RLE8` add a whole grammar of run,
+//! delta and absolute escapes that move the write cursor by amounts the input
+//! chooses.
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;

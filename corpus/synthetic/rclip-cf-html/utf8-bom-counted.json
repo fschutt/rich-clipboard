@@ -1,0 +1,7 @@
+{
+  "format": "CF_HTML",
+  "origin": "synthetic",
+  "description": "CF_HTML behind a UTF-8 BOM whose offsets count the BOM's three bytes",
+  "expect": "ok",
+  "notes": "The blob starts with EF BB BF, so the first header line reads <BOM>Version:1.0 and its \"key\" is not ASCII. A parser that stops the header scan there rejects the whole payload as ErrorKind::BadMagic. The mark is skipped for line reading and counted for every offset: StartHTML equals header_len, BOM included."
+}

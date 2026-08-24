@@ -1,0 +1,9 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "PropertyStoreDataBlock carrying System.AppUserModel.ID and three siblings",
+  "notes": "MS-PROPSTORE 2.2 storage with format ID {9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}; property 5 is the AppUserModelID 'Microsoft.Windows.Explorer' as VT_LPWSTR. Version is 0x53505331 ('1SPS' on the wire). UnicodeString Length counts characters including the terminator, not bytes.",
+  "leak_allow": "Uuid",
+  "leak_allow_reason": "The UUID in the notes is PKEY_AppUserModel_ID's published format ID, documented by Microsoft and identical everywhere. It names a property set, not an install."
+}

@@ -23,6 +23,8 @@
 use rclip_core::{Error, ErrorKind, Reader, Result};
 use rclip_idlist::{Guid, ItemIdList, ShellStr};
 
+use crate::propstore::PropertyStore;
+
 /// `EnvironmentVariableDataBlock`.
 pub const SIG_ENVIRONMENT_VARIABLE: u32 = 0xA000_0001;
 /// `ConsoleDataBlock`.
@@ -117,11 +119,14 @@ pub enum ExtraDataBlock<'a> {
         layer_name: ShellStr<'a>,
     },
     /// 2.5.7 `PropertyStoreDataBlock` — an MS-PROPSTORE serialized property
-    /// storage. Kept opaque; see the crate README.
-    PropertyStore {
-        /// The serialized property storage, undecoded.
-        property_store: &'a [u8],
-    },
+    /// storage, and the only place a `.lnk` states an *application identity*:
+    /// [`PropertyStore::app_user_model_id`] is what taskbar grouping and Jump
+    /// Lists key off.
+    ///
+    /// The store is not decoded here. It borrows the block body and its
+    /// iterators do the work on demand, so a link whose property store is
+    /// malformed still parses, and a caller that never asks never pays.
+    PropertyStore(PropertyStore<'a>),
     /// 2.5.10 `TrackerDataBlock` — what the Distributed Link Tracking service
     /// needs to find a target that has moved.
     ///
@@ -164,7 +169,7 @@ impl<'a> ExtraDataBlock<'a> {
             Self::Darwin(_) => SIG_DARWIN,
             Self::IconEnvironment(_) => SIG_ICON_ENVIRONMENT,
             Self::Shim { .. } => SIG_SHIM,
-            Self::PropertyStore { .. } => SIG_PROPERTY_STORE,
+            Self::PropertyStore(_) => SIG_PROPERTY_STORE,
             Self::KnownFolder { .. } => SIG_KNOWN_FOLDER,
             Self::VistaAndAboveIdList { .. } => SIG_VISTA_AND_ABOVE_ID_LIST,
             Self::Unknown { signature, .. } => *signature,
@@ -176,6 +181,15 @@ impl<'a> ExtraDataBlock<'a> {
     pub const fn id_list(&self) -> Option<ItemIdList<'a>> {
         match self {
             Self::VistaAndAboveIdList { id_list } => Some(ItemIdList::new(id_list)),
+            _ => None,
+        }
+    }
+
+    /// The serialized property storage, for the one variant that holds one.
+    #[must_use]
+    pub const fn property_store(&self) -> Option<PropertyStore<'a>> {
+        match self {
+            Self::PropertyStore(s) => Some(*s),
             _ => None,
         }
     }
@@ -550,12 +564,7 @@ fn parse_block<'a>(r: &mut Reader<'a>, size: u32, at: usize) -> Result<ExtraData
         }
         SIG_PROPERTY_STORE => {
             least(MIN_SIZE_PROPERTY_STORE)?;
-            // TODO(phase-3): decode the MS-PROPSTORE serialized property
-            // storage. It carries the AppUserModelID, which is what taskbar
-            // pinning keys off, so it will be wanted eventually.
-            ExtraDataBlock::PropertyStore {
-                property_store: r.remaining(),
-            }
+            ExtraDataBlock::PropertyStore(PropertyStore::new(r.remaining()))
         }
         SIG_VISTA_AND_ABOVE_ID_LIST => {
             least(MIN_SIZE_VISTA_AND_ABOVE_ID_LIST)?;

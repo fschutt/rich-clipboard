@@ -1,0 +1,7 @@
+{
+  "format": "text/html",
+  "origin": "synthetic",
+  "description": "A fragment cut off in the middle of an attribute value, which is what a truncated clipboard transfer looks like",
+  "expect": "ok",
+  "notes": "Decodes to 'text' with no styling. Not an error: the tokenizer treats end of input as the end of whatever it was reading, because a paste that drops the last tag beats a paste that does nothing."
+}

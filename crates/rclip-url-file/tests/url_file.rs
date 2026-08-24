@@ -306,7 +306,7 @@ fn every_fixture_matches_its_sidecar() {
         }
     }
     assert_eq!(
-        seen, 9,
+        seen, 12,
         "a new fixture needs a test that says what it means"
     );
 }
@@ -398,4 +398,147 @@ fn a_file_without_the_ansi_section_transcodes_to_none_rather_than_an_error() {
         None,
         "the .A section is optional and most writers omit it"
     );
+}
+
+// ---------------------------------------------------------------- IDList=
+//
+// Phase 3. The value is a `WritePrivateProfileStruct` blob, not bare hex: two
+// uppercase digits per byte and then one more byte holding the sum of the data
+// bytes modulo 256.
+
+#[test]
+fn the_modified_key_proves_the_encoding() {
+    // The unofficial guide calls the ninth byte of `Modified=` "a checksum,
+    // unimportant" without saying what it checksums. It is the profile API's:
+    // 0x20+0xF0+0x6B+0xA0+0x6D+0x07+0xBD+0x01 = 0x34D, low byte 0x4D, which is
+    // exactly the trailing byte of the guide's own example. That is the reason
+    // to read `IDList=` the same way rather than as plain hex.
+    let bytes = b"[InternetShortcut]\r\nURL=x:\r\nModified=20F06BA06D07BD014D\r\n";
+    let f = parse(bytes).expect("well-formed");
+    let m = f.modified().expect("present").expect("valid");
+    assert_eq!(m.trailing, "4D");
+
+    #[cfg(feature = "idlist")]
+    {
+        let data = [0x20, 0xF0, 0x6B, 0xA0, 0x6D, 0x07, 0xBD, 0x01];
+        assert_eq!(rclip_url_file::idlist::checksum(&data), 0x4D);
+    }
+}
+
+#[cfg(feature = "idlist")]
+mod id_list {
+    use super::{fixture, parse};
+    use rclip_core::ErrorKind;
+    use rclip_url_file::{idlist, ItemIdList, ShellItem};
+
+    #[test]
+    fn a_pidl_decodes_through_the_profile_struct_encoding() {
+        let bytes = fixture("idlist-pidl.bin");
+        let f = parse(&bytes).expect("well-formed");
+
+        let raw = f.id_list().expect("the key is present");
+        assert!(
+            raw.bytes().all(|b| b.is_ascii_hexdigit()),
+            "hex digits and nothing else"
+        );
+        assert_eq!(raw.len() % 2, 0);
+
+        let pidl = f
+            .id_list_bytes()
+            .expect("the key is present")
+            .expect("checksum matches");
+        assert_eq!(
+            pidl.len(),
+            raw.len() / 2 - 1,
+            "one byte of the value is the checksum, not the PIDL"
+        );
+
+        let kinds: Vec<_> = ItemIdList::new(&pidl)
+            .map(|i| i.expect("well formed").parse())
+            .collect();
+        assert_eq!(kinds.len(), 2);
+        let ShellItem::RootFolder(r) = kinds[0] else {
+            panic!("expected a root folder, got {:?}", kinds[0]);
+        };
+        assert_eq!(r.guid.well_known_name(), Some("My Computer"));
+        let ShellItem::ControlPanel(c) = kinds[1] else {
+            panic!("expected a control panel item, got {:?}", kinds[1]);
+        };
+        assert_eq!(c.name(), Some("Display"));
+
+        assert_eq!(
+            rclip_url_file::display_path(ItemIdList::new(&pidl), "\\"),
+            "My Computer\\Display"
+        );
+    }
+
+    #[test]
+    fn a_bad_checksum_is_an_error_and_can_be_overridden() {
+        let bytes = fixture("idlist-bad-checksum.bin");
+        let f = parse(&bytes).expect("the file itself is well-formed");
+
+        let err = f
+            .id_list_bytes()
+            .expect("the key is present")
+            .expect_err("the checksum byte was corrupted");
+        assert_eq!(err.kind, ErrorKind::Malformed);
+
+        // GetPrivateProfileStruct refuses it too. Taking it anyway is a
+        // deliberate, separate call.
+        let raw = f.id_list().expect("present");
+        let pidl = idlist::decode_no_checksum(raw, 0).expect("digits are still hex");
+        assert_eq!(pidl.len(), raw.len() / 2 - 1);
+    }
+
+    #[test]
+    fn an_odd_digit_count_is_a_length_error() {
+        let bytes = fixture("idlist-odd-digits.bin");
+        let f = parse(&bytes).expect("the file itself is well-formed");
+        let err = f
+            .id_list_bytes()
+            .expect("the key is present")
+            .expect_err("five digits cannot be whole bytes");
+        assert_eq!(err.kind, ErrorKind::BadLength);
+    }
+
+    #[test]
+    fn an_empty_value_is_an_empty_pidl_rather_than_an_error() {
+        // What almost every `.url` on disk actually carries.
+        let bytes = b"[InternetShortcut]\r\nURL=https://example.com/\r\nIDList=\r\n";
+        let f = parse(bytes).expect("well-formed");
+        assert_eq!(f.id_list(), Some(""));
+        assert_eq!(
+            f.id_list_bytes().expect("present").expect("no error"),
+            Vec::<u8>::new()
+        );
+    }
+
+    #[test]
+    fn an_absent_key_is_distinguishable_from_an_empty_one() {
+        let bytes = b"[InternetShortcut]\r\nURL=https://example.com/\r\n";
+        let f = parse(bytes).expect("well-formed");
+        assert!(f.id_list().is_none());
+        assert!(f.id_list_bytes().is_none());
+    }
+
+    #[test]
+    fn a_non_hex_digit_is_rejected_rather_than_folded_to_a_number() {
+        // Wine's `get_hex_byte` accepts 'g'..'z' and gives them values above
+        // 15. That produces bytes nobody wrote, so this refuses instead.
+        assert_eq!(
+            idlist::decode("14gg00", 7).expect_err("not hex").kind,
+            ErrorKind::Malformed
+        );
+        assert_eq!(idlist::decode("14gg00", 7).unwrap_err().offset, 7);
+    }
+
+    #[test]
+    fn encode_and_decode_round_trip() {
+        let pidl = [0x14u8, 0x00, 0x1F, 0x50, 0xFF, 0x00];
+        let text = idlist::encode(&pidl);
+        assert_eq!(text, "14001F50FF0082");
+        assert_eq!(idlist::decode(&text, 0).expect("round trip"), pidl);
+        assert_eq!(idlist::encode(&[]), "00");
+        assert_eq!(idlist::decode("00", 0).expect("empty"), Vec::<u8>::new());
+    }
 }

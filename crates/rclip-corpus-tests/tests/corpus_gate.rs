@@ -277,6 +277,7 @@ fn is_routed_crate(leaf: &str) -> bool {
             | "rclip-dib"
             | "rclip-dropfiles"
             | "rclip-file-desc"
+            | "rclip-html"
             | "rclip-idlist"
             | "rclip-rtf"
             | "rclip-shell-link"
@@ -345,7 +346,8 @@ fn exercise(f: &Fixture, s: &Sidecar, bytes: &[u8]) -> Option<Errors> {
         "rclip-desktop-entry" => desktop_entry(&mut e, bytes),
         "rclip-dib" => drop(e.watch(rclip_dib::decode(bytes, rclip_dib::AlphaMode::Guess))),
         "rclip-dropfiles" => dropfiles(&mut e, bytes),
-        "rclip-file-desc" => file_desc(&mut e, bytes),
+        "rclip-file-desc" => file_desc(&mut e, &s.format, bytes),
+        "rclip-html" => html_fragment(&mut e, bytes),
         "rclip-idlist" => idlist(&mut e, &s.format, bytes),
         "rclip-rtf" => drop(e.watch(rclip_rtf::Document::parse(bytes))),
         "rclip-shell-link" => shell_link(&mut e, bytes),
@@ -400,7 +402,7 @@ fn route_capture(e: &mut Errors, s: &Sidecar, bytes: &[u8]) -> Option<()> {
                 return Some(());
             }
             "FileDescriptor" => {
-                file_desc(e, bytes);
+                file_desc(e, &s.format, bytes);
                 return Some(());
             }
             // `FileList` and `Url` are several formats wearing one name, so
@@ -565,7 +567,10 @@ fn route_by_format(e: &mut Errors, format: &str, bytes: &[u8]) -> Option<()> {
             drop(e.watch(rclip_dib::decode(bytes, rclip_dib::AlphaMode::Guess)));
         }
         "cf_hdrop" => dropfiles(e, bytes),
-        "cfstr_filedescriptorw" => file_desc(e, bytes),
+        "cfstr_filedescriptorw" => file_desc(e, "CFSTR_FILEDESCRIPTORW", bytes),
+        "cfstr_filedescriptor" | "filegroupdescriptora" => {
+            file_desc(e, "FILEGROUPDESCRIPTORA", bytes);
+        }
         "itemidlist" | "cfstr_shellidlist" => idlist(e, format, bytes),
         "ms-shllink" => shell_link(e, bytes),
         "webloc" | "inetloc" => drop(e.watch(rclip_webloc::Webloc::parse(bytes))),
@@ -636,7 +641,24 @@ fn dropfiles(e: &mut Errors, bytes: &[u8]) {
     }
 }
 
-fn file_desc(e: &mut Errors, bytes: &[u8]) {
+fn file_desc(e: &mut Errors, format: &str, bytes: &[u8]) {
+    // CFSTR_FILEDESCRIPTOR comes in two layouts that differ only in the width
+    // of `cFileName` — 592 bytes per descriptor wide, 332 ANSI — and neither
+    // carries a marker saying which it is. The format name is the only thing
+    // that decides, which is exactly why the crate refuses to sniff: an ANSI
+    // payload "fits" the wide reading and comes back with a wrong name rather
+    // than an error. Routing on the directory alone would have made an ANSI
+    // fixture unrepresentable in the corpus.
+    if format.eq_ignore_ascii_case("CFSTR_FILEDESCRIPTOR")
+        || format.eq_ignore_ascii_case("FILEGROUPDESCRIPTORA")
+    {
+        if let Some(group) = e.watch(rclip_file_desc::FileGroupDescriptorA::parse(bytes)) {
+            for d in &group {
+                let _ = d;
+            }
+        }
+        return;
+    }
     if let Some(group) = e.watch(rclip_file_desc::FileGroupDescriptor::parse(bytes)) {
         for d in &group {
             let _ = d;
@@ -702,6 +724,40 @@ fn uri_list(e: &mut Errors, format: &str, bytes: &[u8]) {
     if let Some(list) = e.watch(rclip_uri_list::parse(bytes)) {
         // A truncated `%` escape is only visible once a URI is looked at.
         e.watch(list.validate_percent_encoding());
+    }
+}
+
+/// An HTML fragment, as deep as the format goes: the element stack, and then
+/// every text run decoded and every attribute of every tag walked.
+///
+/// The second pass matters because `Document::parse` is allowed to absorb
+/// almost everything — a fragment that produced no error is only interesting if
+/// the accessors agree, and the attribute walk is what reaches the CSS splitter
+/// and the character-reference decoder on a fixture whose styling nothing else
+/// looks at.
+fn html_fragment(e: &mut Errors, bytes: &[u8]) {
+    if e.watch(rclip_html::Document::parse(bytes)).is_none() {
+        return;
+    }
+    for run in rclip_html::Runs::new(bytes) {
+        let Some(run) = e.watch(run) else { return };
+        if let rclip_html::RunText::Text(t) = run.text {
+            assert!(
+                t.chars().count() > 0 || t.as_raw().is_empty(),
+                "a run was emitted for text that decodes to nothing"
+            );
+        }
+    }
+    for token in rclip_html::Tokenizer::new(bytes) {
+        if let rclip_html::Token::StartTag(tag) = token {
+            for attr in tag.attributes() {
+                let _ = attr.value.chars().count();
+                for decl in rclip_html::css::declarations(attr.value.as_raw()) {
+                    let _ = rclip_html::css::color(decl.value);
+                    let _ = rclip_html::css::font_size_pt(decl.value, None);
+                }
+            }
+        }
     }
 }
 

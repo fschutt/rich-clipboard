@@ -1,0 +1,7 @@
+{
+  "format": "text/html",
+  "origin": "synthetic",
+  "description": "Named references, numeric decimal and hex, the Windows-1252 remap of the C1 range, a missing semicolon, and two that are not references at all",
+  "expect": "ok",
+  "notes": "&#150; decodes to U+2013 EN DASH rather than U+0096: HTML5 writes the Windows-1252 mis-mapping into the spec because every browser had to implement it. &#0; and &#x110000; both become U+FFFD. &notin; is U+2209 and not '&not;' followed by 'in'. '&amp' without a semicolon still resolves; '&nosuchentity;' and a bare '&' stay literal."
+}

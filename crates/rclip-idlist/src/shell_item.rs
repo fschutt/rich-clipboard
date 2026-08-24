@@ -26,7 +26,16 @@
 //! bytes later, so every documented offset appears here minus two. The doc
 //! comments give the `abID`-relative numbers to match the code.
 
-use crate::{dostime::DosDateTime, guid::Guid, item::MIN_ITEM_SIZE, string::ShellStr};
+use crate::{
+    dostime::DosDateTime,
+    guid::Guid,
+    item::MIN_ITEM_SIZE,
+    signature::{
+        self, CompressedFolder, ControlPanelItem, DelegateFolder, MtpFileEntry, MtpVolume,
+        UsersPropertyView,
+    },
+    string::ShellStr,
+};
 
 /// Mask that selects the class *family* from a class type indicator.
 ///
@@ -49,7 +58,6 @@ pub const CLASS_FAMILY_URI: u8 = 0x60;
 /// URI item. Class `0x61` exactly.
 pub const CLASS_URI: u8 = 0x61;
 /// Control panel item. Class `0x71` exactly.
-// TODO(phase-3): decode the control panel item body (a GUID plus a name).
 pub const CLASS_CONTROL_PANEL: u8 = 0x71;
 
 /// Volume item whose body is a GUID rather than a drive name.
@@ -99,6 +107,21 @@ pub enum ShellItem<'a> {
     NetworkLocation(NetworkLocation<'a>),
     /// Class `0x61`.
     Uri(Uri<'a>),
+    /// Class `0x71`.
+    ControlPanel(ControlPanelItem<'a>),
+    /// Signature `0x10312005` at `abID[4..8]`: an MTP storage device volume.
+    MtpVolume(MtpVolume<'a>),
+    /// Signature `0x07192006` at `abID[4..8]`: a file or folder on one.
+    MtpFileEntry(MtpFileEntry<'a>),
+    /// One of six signatures at `abID[4..8]`: the item below the Users folder
+    /// and below a library.
+    UsersPropertyView(UsersPropertyView<'a>),
+    /// Recognised by the punctuation of its formatted timestamp: an entry
+    /// inside a zip archive.
+    CompressedFolder(CompressedFolder<'a>),
+    /// Recognised by a class identifier near the end of the item: another shell
+    /// item wrapped in a namespace extension's GUID.
+    DelegateFolder(DelegateFolder<'a>),
     /// Anything else, or a body too short for the layout its class implies.
     ///
     /// Not an error, and not a dead end — `raw` is the complete `abID`, so a
@@ -114,17 +137,39 @@ pub enum ShellItem<'a> {
 impl<'a> ShellItem<'a> {
     /// Interpret `data`, the `abID` of a `SHITEMID`.
     ///
-    /// Dispatch is on the class byte alone. `libfwsi` additionally probes a set
-    /// of 32-bit signatures at fixed offsets to recognise MTP devices, control
-    /// panel categories, Acronis images and the like before falling back to the
-    /// class byte; those all land in [`ShellItem::Unknown`] here.
-    // TODO(phase-3): signature-based recognition (MTP, users property view,
-    // delegate folders) and the compressed-folder heuristics.
+    /// Two dispatches, in libfwsi's order. First
+    /// [`signature::recognise`](crate::signature::recognise): several shell
+    /// extensions write a class byte of `0x00` and identify themselves with a
+    /// 32-bit signature inside the body instead, so the class byte alone would
+    /// leave an MTP device, a zip file's interior and the Users folder all
+    /// unnamed. Only then the class byte.
+    ///
+    /// The signature probes read fixed offsets on items of every class, which
+    /// is libfwsi's behaviour and is not free: an item of a known class whose
+    /// bytes happened to spell a signature would be reclassified. See the
+    /// [`signature`](crate::signature) module for why that is tolerable.
     #[must_use]
     pub fn parse(data: &'a [u8]) -> Self {
+        Self::dispatch(data, true)
+    }
+
+    /// [`ShellItem::parse`] without the delegate folder probe.
+    ///
+    /// Used to interpret the *inside* of a delegate folder, where re-entering
+    /// the delegate path would let a nested item recurse. Everything else —
+    /// the signature probes and the class byte — works the same.
+    #[must_use]
+    pub fn parse_no_delegate(data: &'a [u8]) -> Self {
+        Self::dispatch(data, false)
+    }
+
+    fn dispatch(data: &'a [u8], delegate: bool) -> Self {
         let Some(&class) = data.first() else {
             return Self::Empty;
         };
+        if let Some(item) = signature::recognise(data, delegate) {
+            return item;
+        }
         let parsed = match class & CLASS_FAMILY_MASK {
             // 0x10 is only a root folder for the exact value 0x1F.
             0x10 if class == CLASS_ROOT_FOLDER => RootFolder::parse(data).map(Self::RootFolder),
@@ -132,6 +177,9 @@ impl<'a> ShellItem<'a> {
             CLASS_FAMILY_FILE_ENTRY => FileEntry::parse(class, data).map(Self::FileEntry),
             CLASS_FAMILY_NETWORK => NetworkLocation::parse(class, data).map(Self::NetworkLocation),
             CLASS_FAMILY_URI if class == CLASS_URI => Uri::parse(class, data).map(Self::Uri),
+            0x70 if class == CLASS_CONTROL_PANEL => {
+                ControlPanelItem::parse(class, data).map(Self::ControlPanel)
+            }
             _ => None,
         };
         parsed.unwrap_or(Self::Unknown { class, raw: data })
@@ -147,6 +195,12 @@ impl<'a> ShellItem<'a> {
             Self::FileEntry(f) => Some(f.class),
             Self::NetworkLocation(n) => Some(n.class),
             Self::Uri(u) => Some(u.class),
+            Self::ControlPanel(c) => Some(c.class),
+            Self::MtpVolume(v) => Some(v.class),
+            Self::MtpFileEntry(f) => Some(f.class),
+            Self::UsersPropertyView(v) => Some(v.class),
+            Self::CompressedFolder(c) => Some(c.class),
+            Self::DelegateFolder(d) => Some(d.class),
             Self::Unknown { class, .. } => Some(*class),
         }
     }
@@ -161,6 +215,12 @@ impl<'a> ShellItem<'a> {
             Self::FileEntry(f) => f.raw,
             Self::NetworkLocation(n) => n.raw,
             Self::Uri(u) => u.raw,
+            Self::ControlPanel(c) => c.raw,
+            Self::MtpVolume(v) => v.raw,
+            Self::MtpFileEntry(f) => f.raw,
+            Self::UsersPropertyView(v) => v.raw,
+            Self::CompressedFolder(c) => c.raw,
+            Self::DelegateFolder(d) => d.raw,
             Self::Unknown { raw, .. } => raw,
         }
     }
@@ -194,6 +254,19 @@ impl<'a> ShellItem<'a> {
                 .guid
                 .well_known_name()
                 .map(|n| ShellStr::Ansi(n.as_bytes())),
+            // Same rule for the two other GUID-named items: a name from a table
+            // or nothing, never the GUID's own hex.
+            Self::ControlPanel(c) => c.name().map(|n| ShellStr::Ansi(n.as_bytes())),
+            Self::UsersPropertyView(v) => v
+                .known_folder_id
+                .and_then(|g| g.well_known_name())
+                .map(|n| ShellStr::Ansi(n.as_bytes())),
+            Self::MtpVolume(v) => v.name,
+            Self::MtpFileEntry(f) => f.name,
+            Self::CompressedFolder(c) => c.name,
+            // A delegate folder is a wrapper. Its own name is the name of what
+            // it wraps; one level down and no further.
+            Self::DelegateFolder(d) => d.inner_item().display_name(),
             Self::Empty | Self::Unknown { .. } => None,
         }
     }
@@ -335,6 +408,14 @@ pub struct FileEntry<'a> {
     pub attributes: u16,
     /// The name stored in the item body itself, frequently the 8.3 form.
     pub primary_name: ShellStr<'a>,
+    /// The 8.3 short name, for a pre-Windows-XP item that carries one.
+    ///
+    /// Before Windows XP a file entry stored *two* names back to back instead
+    /// of an extension block: the long one first and the short one after it, or
+    /// the short one first and an empty string after it. `None` on an XP or
+    /// later item, which uses a `0xBEEF0004` block for the same job — see
+    /// [`FileEntry::is_pre_xp`].
+    pub secondary_name: Option<ShellStr<'a>>,
     /// The long name from the `0xBEEF0004` extension block, when present.
     /// Always UTF-16LE, and not necessarily *valid* UTF-16 — unpaired
     /// surrogates occur in real captures, which is why this is bytes and not
@@ -346,6 +427,13 @@ pub struct FileEntry<'a> {
     pub localized_name: Option<ShellStr<'a>>,
     /// The first extension block, whatever its signature.
     pub extension: Option<ExtensionBlock<'a>>,
+    /// `true` if this item uses the pre-Windows-XP layout, i.e. a secondary
+    /// name where a newer shell would have written an extension block.
+    ///
+    /// There is no version field to read; see [`FileEntry::parse`] for how
+    /// libfwsi decides, and why the decision is a look-ahead rather than a
+    /// flag.
+    pub is_pre_xp: bool,
     /// The entire body including the class byte.
     pub raw: &'a [u8],
 }
@@ -375,22 +463,66 @@ impl<'a> FileEntry<'a> {
         self.class & FILE_ENTRY_UNICODE != 0
     }
 
-    // TODO(phase-3): pre-XP file entries carry a *secondary* name (the 8.3 form)
-    // after the primary one instead of an extension block. Detectable by the
-    // u16 after the primary name being zero or larger than `cb`.
+    /// # Telling a pre-XP item from an XP one
+    ///
+    /// Nothing in the item says which layout it is. libfwsi decides by looking
+    /// at the `u16` immediately after the primary name — the field that would
+    /// be an extension block's size — and asking whether it could be one: an
+    /// item is pre-XP when there is no room for that `u16` at all, or when the
+    /// size it holds is larger than the whole item. This crate does the same,
+    /// including the 16-bit alignment padding that an odd-length ANSI name
+    /// takes before the block.
+    ///
+    /// The `0xB1` SolidWorks variant is excluded from that test the way libfwsi
+    /// excludes it: an item whose last thirty bytes begin with the UTF-16 text
+    /// `S.W.N.1` is never pre-XP, and its strings are Unicode regardless of the
+    /// class flag.
     fn parse(class: u8, data: &'a [u8]) -> Option<Self> {
         let file_size = u32::from_le_bytes(data.get(2..6)?.try_into().ok()?);
         let modified = DosDateTime::from_le_bytes(data.get(6..10)?.try_into().ok()?);
         let attributes = u16::from_le_bytes(data.get(10..12)?.try_into().ok()?);
 
-        let name_bytes = data.get(12..)?;
-        let primary_name = if class & FILE_ENTRY_UNICODE != 0 {
-            ShellStr::Utf16(utf16_nul_terminated(name_bytes))
+        let has_swn1 = data
+            .len()
+            .checked_sub(30)
+            .and_then(|at| data.get(at..at + 7))
+            .is_some_and(|w| w == b"S.W.N.1");
+        let unicode = has_swn1 || class & FILE_ENTRY_UNICODE != 0;
+
+        const NAME_AT: usize = 12;
+        let rest = data.get(NAME_AT..)?;
+        let (primary_name, consumed) = read_name(rest, unicode);
+
+        // libfwsi's look-ahead, in `abID` coordinates. `cb` is the item size
+        // including its own two bytes, which is what the declared extension
+        // size is compared against.
+        let cb = data.len() + MIN_ITEM_SIZE;
+        let after_name = NAME_AT + consumed;
+        let alignment = if unicode { 0 } else { consumed % 2 };
+        let aligned = after_name.saturating_add(alignment);
+        let available = data.len().saturating_sub(aligned);
+        let extension_size = if available >= 2 {
+            usize::from(u16::from_le_bytes([data[aligned], data[aligned + 1]]))
         } else {
-            ShellStr::Ansi(nul_terminated(name_bytes))
+            0
+        };
+        let is_pre_xp =
+            !has_swn1 && after_name < data.len() && (available < 2 || extension_size > cb);
+
+        let secondary_name = if is_pre_xp {
+            let (s, _) = read_name(data.get(after_name..)?, unicode);
+            Some(s)
+        } else {
+            None
         };
 
-        let extension = ExtensionBlock::find(data);
+        // A pre-XP item has no extension blocks at all; running the search
+        // anyway would read its secondary name's last two bytes as an offset.
+        let extension = if is_pre_xp {
+            None
+        } else {
+            ExtensionBlock::find(data)
+        };
         let file_ext = extension.and_then(ExtensionBlock::as_file_entry);
 
         Some(Self {
@@ -399,9 +531,11 @@ impl<'a> FileEntry<'a> {
             modified,
             attributes,
             primary_name,
+            secondary_name,
             long_name: file_ext.and_then(|e| e.long_name),
             localized_name: file_ext.and_then(|e| e.localized_name),
             extension,
+            is_pre_xp,
             raw: data,
         })
     }
@@ -483,18 +617,19 @@ impl<'a> NetworkLocation<'a> {
 /// ..           URI string, NUL-terminated
 /// ```
 ///
-/// The data block's interior is version dependent — for the FTP variant it holds
-/// a `FILETIME` and three length-prefixed strings including a **password** —
-/// and is kept as [`Uri::data`] rather than decoded.
-// TODO(phase-3): decode the >= 36 byte FTP data block. Note when doing so that
-// it contains a cleartext password, which is a reason to keep it out of any
-// Debug output.
+/// The data block's interior is version dependent. At 36 bytes or more it is
+/// the FTP layout, decoded into [`Uri::ftp`]; the raw bytes stay in
+/// [`Uri::data`] either way.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Uri<'a> {
     pub class: u8,
     pub flags: u8,
     /// The version-dependent block between the header and the string.
     pub data: &'a [u8],
+    /// [`Uri::data`] decoded as the FTP layout, when it is at least 36 bytes.
+    ///
+    /// **Contains a cleartext password.** See [`FtpData`].
+    pub ftp: Option<FtpData<'a>>,
     /// The URI itself, when it could be located. The libfwsi document notes it
     /// is "not always present".
     pub uri: Option<ShellStr<'a>>,
@@ -524,10 +659,112 @@ impl<'a> Uri<'a> {
             class,
             flags,
             data: fixed,
+            ftp: FtpData::parse(fixed, flags & URI_UNICODE != 0),
             uri,
             raw: data,
         })
     }
+}
+
+/// Smallest FTP data block: the fixed header, before the three counted strings.
+pub const MIN_FTP_DATA_SIZE: usize = 36;
+
+/// The FTP variant of a URI item's data block.
+///
+/// ```text
+/// block[0..4]    unknown
+/// block[4..8]    unknown
+/// block[8..16]   FILETIME
+/// block[16..20]  unknown; seen 0x00000000 and 0xFFFFFFFF
+/// block[20..32]  unknown, zero in every sample
+/// block[32..36]  unknown
+/// block[36..40]  u32 host length, in bytes
+/// block[40..]    host, then u32 + user, then u32 + password
+/// ```
+///
+/// Only the three strings and the timestamp are named, because they are the
+/// only fields libfwsi is willing to name.
+///
+/// # The password
+///
+/// `.url` and `.lnk` files really do carry FTP credentials in the clear here —
+/// that is what the field is for, and it is why this struct's [`Debug`]
+/// implementation prints `password: <redacted>`. That is a courtesy against
+/// accidental logging, not a security boundary: [`FtpData::password`] is a
+/// public field and the bytes are also still in [`Uri::data`]. Anything that
+/// forwards a parsed PIDL to a log, a crash report or a bug tracker has to make
+/// its own decision about this field.
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub struct FtpData<'a> {
+    /// 100-nanosecond intervals since 1601-01-01 UTC; libfwsi guesses "first
+    /// access to the server". Zero means unset.
+    pub timestamp: u64,
+    /// Host name or IP address.
+    pub host: Option<ShellStr<'a>>,
+    /// User name.
+    pub user: Option<ShellStr<'a>>,
+    /// Password, in the clear.
+    pub password: Option<ShellStr<'a>>,
+}
+
+impl<'a> FtpData<'a> {
+    fn parse(block: &'a [u8], unicode: bool) -> Option<Self> {
+        if block.len() < MIN_FTP_DATA_SIZE {
+            return None;
+        }
+        let timestamp = u64::from_le_bytes(block.get(8..16)?.try_into().ok()?);
+        let mut at = MIN_FTP_DATA_SIZE;
+        let host = read_counted_string(block, &mut at, unicode);
+        let user = read_counted_string(block, &mut at, unicode);
+        let password = read_counted_string(block, &mut at, unicode);
+        Some(Self {
+            timestamp,
+            host,
+            user,
+            password,
+        })
+    }
+}
+
+impl core::fmt::Debug for FtpData<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("FtpData")
+            .field("timestamp", &self.timestamp)
+            .field("host", &self.host)
+            .field("user", &self.user)
+            .field(
+                "password",
+                &if self.password.is_some() {
+                    "<redacted>"
+                } else {
+                    "None"
+                },
+            )
+            .finish()
+    }
+}
+
+/// A `u32`-byte-counted string, advancing `at` past both the count and the
+/// bytes.
+///
+/// The count is in **bytes** here, unlike the character counts in the MTP
+/// items. A count that runs past the block ends the sequence: every string
+/// after it would be read at a wrong offset.
+fn read_counted_string<'a>(block: &'a [u8], at: &mut usize, unicode: bool) -> Option<ShellStr<'a>> {
+    let head = block.get(*at..at.checked_add(4)?)?;
+    let len = u32::from_le_bytes([head[0], head[1], head[2], head[3]]) as usize;
+    let start = at.checked_add(4)?;
+    let end = start.checked_add(len)?;
+    let raw = block.get(start..end)?;
+    *at = end;
+    if raw.is_empty() {
+        return None;
+    }
+    Some(if unicode {
+        ShellStr::Utf16(utf16_nul_terminated(raw))
+    } else {
+        ShellStr::Ansi(nul_terminated(raw))
+    })
 }
 
 /// A `0xBEEFxxxx` extension block appended to a shell item.
@@ -761,6 +998,31 @@ impl<'a> FileEntryExtension<'a> {
             long_name,
             localized_name,
         })
+    }
+}
+
+/// A NUL-terminated name at the start of `bytes`, and how many bytes it took.
+///
+/// The count includes the terminator when there was one and is the whole slice
+/// when there was not, which is what makes it usable as a stride: the next
+/// field starts exactly `consumed` bytes in.
+fn read_name(bytes: &[u8], unicode: bool) -> (ShellStr<'_>, usize) {
+    if unicode {
+        let s = utf16_nul_terminated(bytes);
+        let consumed = if s.len() + 2 <= bytes.len() {
+            s.len() + 2
+        } else {
+            bytes.len()
+        };
+        (ShellStr::Utf16(s), consumed)
+    } else {
+        let s = nul_terminated(bytes);
+        let consumed = if s.len() < bytes.len() {
+            s.len() + 1
+        } else {
+            bytes.len()
+        };
+        (ShellStr::Ansi(s), consumed)
     }
 }
 

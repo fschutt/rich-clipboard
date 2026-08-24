@@ -158,12 +158,95 @@ produces confident garbage rather than an error.
 
 Fixture: `ansi-string-data-cp1252.bin`.
 
+## The shared shortcut type
+
+`ShellLink::target()` answers the one question `.url`, `.webloc`, `.desktop` (`Type=Link`) and
+`text/uri-list` also answer, in the same vocabulary: `rclip_core::shortcut::ShortcutTarget`,
+re-exported here as `rclip_shell_link::ShortcutTarget`. See `plan/PLAN.md` §4.10.
+
+A `.lnk` is the awkward member of that family. The other four state their destination once, as a
+string; a shell link states it up to four times, in four structures, in two encodings, and calls
+the authoritative one an `ITEMIDLIST` — which is a binary shell namespace path and not text at
+all. So `target_candidates()` enumerates the destination *strings* the file carries, most absolute
+first:
+
+| Order | Source | Example |
+|---|---|---|
+| 1 | `LinkInfo` `LocalBasePath` (2.3) | `C:\Users\me\notes.txt` |
+| 2 | `CommonNetworkRelativeLink` `NetName` (2.3.2) | `\\fileserver\public` |
+| 3 | `EnvironmentVariableDataBlock` (2.5.4) | `%windir%\system32\cmd.exe` |
+| 4 | `StringData` `RELATIVE_PATH` (2.4) | `.\notes.txt` |
+
+`target()` is the first of those that can be borrowed as a `&str`, classified. It returns `None`
+for a UTF-16 field and for an ANSI field holding a byte above `0x7F`, because both need
+re-encoding and re-encoding allocates — which is most modern links, since Windows sets
+`IsUnicode`. That is deliberate: the candidate list hands back the `ShellStr` either way, and
+`to_string_lossy` behind the `alloc` feature is where a caller that wants a `String` goes.
+
+Two more things it does not do. The target IDList is not a candidate — walk it with
+`LinkTargetIdList::items` — and `LocalBasePath` is skipped when `CommonPathSuffix` is non-empty,
+because MS-SHLLINK 2.3 forms the full path by concatenating the two and returning the base alone
+would be a confidently wrong path.
+
+## The property store (`src/propstore.rs`)
+
+**Done** — was `// TODO(phase-3)`. `PropertyStoreDataBlock` (2.5.7) is no longer
+opaque bytes: its payload is an [MS-PROPSTORE] serialized property storage and
+this crate decodes it.
+
+```rust
+let link = ShellLink::parse(bytes)?;
+link.app_user_model_id();                  // the one-liner
+link.property_store()                      // or address it explicitly
+    .and_then(|s| s.get(&FMTID_APP_USER_MODEL, PID_APP_USER_MODEL_ID));
+```
+
+`System.AppUserModel.ID` is why this is worth having. It is the string Windows
+groups taskbar buttons by, the one a pinned shortcut relaunches through, and the
+one a Jump List hangs off — the only application identity a `.lnk` carries that
+is not a file path. Format ID `{9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}`, property
+`5`. It is also entirely the writer's choice, so it is an identity *claim*:
+nothing stops a shortcut from naming another application's AppUserModelID, which
+is exactly how one gets itself grouped under someone else's button.
+
+Nine `VT_*` types are decoded — the ones that turn up in a shell link:
+
+| Covered | Not covered |
+|---|---|
+| `VT_EMPTY`, `VT_NULL`, `VT_I4`, `VT_UI4`, `VT_BOOL`, `VT_FILETIME`, `VT_CLSID`, `VT_LPWSTR`, `VT_BSTR` | everything else, including every `VT_VECTOR`/`VT_ARRAY` and `VT_LPSTR` |
+
+Anything else becomes `PropertyValue::Unsupported { property_type, data }` with
+its raw payload, and the walk carries on to the next property — values are
+length-delimited by `ValueSize`, which is what makes skipping one possible
+without understanding it. Refusing to guess is the point: a
+`VT_VECTOR | VT_LPWSTR` read as a `VT_LPWSTR` yields a plausible string that is
+not the property's value. `PropertyValue::decode` reports `ErrorKind::Unsupported`
+for a caller that wants the error rather than the variant.
+
+Three details that a hand-rolled reader gets wrong:
+
+- **`Version` is the only hard check.** `0x53505331` — `"1SPS"` on the wire. A
+  storage that says anything else is rejected with `ErrorKind::BadMagic`,
+  because otherwise a mis-sized block reads as a storage whose format ID is
+  sixteen bytes of something else, and values under a wrong format ID are worse
+  than no values.
+- **`Reserved` comes *before* the name**, not after it: 2.3.1 is `ValueSize`,
+  `NameSize`, `Reserved`, `Name`. Reading it after shifts every value in the
+  storage by one byte.
+- **`UnicodeString`'s `Length` counts characters, not bytes.** Reading it as a
+  byte count halves every string. `CodePageString`'s `Size` *is* bytes.
+
+Whether a storage's values are string-named is a property of the *storage*: it
+is the integer-named form unless the format ID is
+`{D5CDD505-2E9C-101B-9397-08002B2CF9AE}`. There is no per-value discriminator,
+so a value cannot be read out of context.
+
+The same structure appears inside a PIDL — `rclip_idlist::UsersPropertyView`
+hands back an MS-PROPSTORE blob — and `PropertyStore::new` takes any `&[u8]`, so
+those bytes go straight through this decoder for a caller that has both crates.
+
 ## Not implemented yet
 
-- `// TODO(phase-3)` **`PropertyStoreDataBlock` is opaque bytes.** Decoding it
-  means implementing [MS-PROPSTORE] serialized property storage, which is a
-  format of its own. It carries the `AppUserModelID` that taskbar pinning keys
-  off, so it will be wanted eventually.
 - The builder writes `LinkInfo` with a `VolumeID` and a local base path, but not
   with a `CommonNetworkRelativeLink`. Use `local_path` for local targets,
   `environment_path` for portable ones, and `extra_block` for anything else.
@@ -184,6 +267,16 @@ at once, including an `ExtraData` block with the unassigned `0xA000000A`
 signature. The malformed ones each assert a specific `ErrorKind`:
 `truncated-header`, `bad-clsid`, `bad-header-size`, `string-count-past-end`,
 `extra-block-too-small`, `link-info-too-small`, `id-list-size-past-end`.
+
+The four property-store fixtures all expect `ok`, and deliberately:
+`property-store-bad-version` and `property-store-value-size-too-small` are
+well-formed *shell links* whose *store* is broken, so `ShellLink::parse` and the
+`ExtraData` walk both succeed and the failure only appears once you walk the
+store. Their sidecars name the `ErrorKind` in `notes` and the crate's own tests
+assert it — `BadMagic` for the version, `BadLength` for the value size.
+`property-store-mixed-types` carries a `VT_VECTOR | VT_LPWSTR` between two
+decodable properties, which is what proves an unknown type costs one value and
+not the storage.
 
 Two of the tests are randomised rather than fixture-driven — one walks
 `ExtraData` over random trailing bytes, the other bit-flips and truncates the

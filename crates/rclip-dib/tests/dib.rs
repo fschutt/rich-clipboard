@@ -363,8 +363,9 @@ fn rejected_headers() {
             .kind,
         ErrorKind::Unsupported
     );
-    // BI_RLE8 / BI_RLE4 / BI_JPEG / BI_PNG are all deliberately unimplemented.
-    for comp in [1u32, 2, 4, 5] {
+    // BI_JPEG and BI_PNG are an embedded JPEG or PNG in a DIB wrapper, and are
+    // permanently out of scope for this crate rather than merely unwritten.
+    for comp in [4u32, 5] {
         assert_eq!(
             DibHeader::parse(&info_header(2, 2, 1, 8, comp))
                 .unwrap_err()
@@ -373,6 +374,15 @@ fn rejected_headers() {
             "compression {comp} should be reported as unsupported"
         );
     }
+    // BI_RLE8 at 8 bpp is now decoded, so a bare header with no run stream at
+    // all fails on the missing pixel data rather than on the compression.
+    assert_eq!(
+        DibHeader::parse(&info_header(2, 2, 1, 8, 1))
+            .unwrap_err()
+            .kind,
+        ErrorKind::BadOffset,
+        "a header with no palette and no runs stops short of the pixel offset"
+    );
     // A FOURCC in biCompression means this is a DirectShow video format.
     assert_eq!(
         DibHeader::parse(&info_header(2, 2, 1, 24, 0x5659_5559))
@@ -575,6 +585,379 @@ fn encode_rejects_guess_and_bad_sizes() {
     );
 }
 
+// ------------------------------------------------------------------- RLE ----
+
+/// Pixels no run covers. RLE is the one DIB encoding that can leave a hole, and
+/// a hole is not palette entry zero — that is a real colour a real run could
+/// have written.
+const HOLE: [u8; 4] = [0, 0, 0, 0];
+
+#[test]
+fn rle8_walks_encoded_absolute_and_delta_runs() {
+    let src = fixture("8bpp-rle8-4x3");
+    let header = DibHeader::parse(&src).unwrap();
+    assert!(header.is_rle());
+    assert_eq!(header.compression(), rclip_dib::BI_RLE8);
+    assert_eq!((header.width(), header.height()), (4, 3));
+    assert_eq!(
+        header.stride(),
+        0,
+        "a compressed row has no fixed stride, and reporting the decoded one \
+         would let packed-path arithmetic produce a plausible wrong answer"
+    );
+    assert_eq!(
+        header.image_bytes(),
+        22,
+        "for RLE, image_bytes is the length of the compressed stream"
+    );
+
+    assert_eq!(
+        decode("8bpp-rle8-4x3", AlphaMode::Straight),
+        rgba(&[
+            // Top row: a delta skipped the first two pixels entirely.
+            HOLE, HOLE, GREEN, GREEN,
+            // Middle row: an absolute run of three, then a one-pixel run.
+            GREEN, BLUE, GREEN, BLUE,
+            // Bottom row on the wire is the first: a single run of four.
+            RED, RED, RED, RED,
+        ])
+    );
+}
+
+#[test]
+fn rle4_alternates_nibbles_and_pads_absolute_runs_to_a_word() {
+    let src = fixture("4bpp-rle4-6x2");
+    let header = DibHeader::parse(&src).unwrap();
+    assert!(header.is_rle());
+    assert_eq!(header.compression(), rclip_dib::BI_RLE4);
+    assert_eq!(header.bit_count(), 4);
+
+    assert_eq!(
+        decode("4bpp-rle4-6x2", AlphaMode::Straight),
+        rgba(&[
+            // Absolute run of five (3 packed bytes + a pad byte), then one more.
+            BLUE, BLACK, BLUE, BLACK, BLUE, GREEN,
+            // Encoded run of six from the two nibbles of 0x12, high nibble first.
+            RED, GREEN, RED, GREEN, RED, GREEN,
+        ])
+    );
+}
+
+#[test]
+fn a_delta_that_leaves_the_bitmap_is_rejected() {
+    // Unsigned offsets, so the *read* cursor only moves forward — but the rows
+    // are bottom-up, so advancing y walks backwards through the output buffer.
+    expect_err("rle8-delta-past-top", ErrorKind::Malformed);
+}
+
+#[test]
+fn an_absolute_run_longer_than_the_stream_is_eof_not_a_read_past_the_end() {
+    expect_err("rle8-absolute-past-end", ErrorKind::UnexpectedEof);
+}
+
+#[test]
+fn a_run_past_the_last_row_or_the_row_end_is_rejected_before_it_is_written() {
+    expect_err("rle8-run-past-rows", ErrorKind::Malformed);
+    expect_err("rle8-run-past-width", ErrorKind::Malformed);
+}
+
+#[test]
+fn an_rle_run_naming_a_palette_entry_that_is_not_there_is_rejected() {
+    expect_err("rle8-palette-index-past-end", ErrorKind::Malformed);
+}
+
+#[test]
+fn a_compressed_top_down_bitmap_is_a_contradiction() {
+    expect_err("rle8-top-down", ErrorKind::Malformed);
+}
+
+#[test]
+fn the_rle_variant_must_match_the_bit_count() {
+    expect_err("rle4-bit-count-mismatch", ErrorKind::Malformed);
+}
+
+#[test]
+fn a_truncated_rle_stream_stops_rather_than_looping() {
+    // Every path through the run loop consumes at least the two bytes it reads
+    // at the top, so a stream that ends mid-grammar terminates. Feed it every
+    // prefix of a good fixture and require each one to answer.
+    let src = fixture("8bpp-rle8-4x3");
+    let body = 40 + 16;
+    for len in body..=src.len() {
+        let mut truncated = src[..len].to_vec();
+        // biSizeImage names a stream longer than what is left; zero it so the
+        // header reads "the rest of the payload" and the run loop, not the
+        // length check, is what is under test.
+        truncated[20..24].copy_from_slice(&0u32.to_le_bytes());
+        let header = DibHeader::parse(&truncated).expect("header is intact");
+        let mut out = vec![0u8; header.required_buffer_len()];
+        // Ok or Err, but never a hang and never a panic.
+        let _ = header.decode_into(&truncated, &mut out, AlphaMode::Guess);
+    }
+}
+
+#[test]
+fn a_declared_size_image_longer_than_the_payload_is_eof() {
+    let mut src = fixture("8bpp-rle8-4x3");
+    src[20..24].copy_from_slice(&9999u32.to_le_bytes());
+    assert_eq!(
+        DibHeader::parse(&src).unwrap_err().kind,
+        ErrorKind::UnexpectedEof,
+        "biSizeImage is the only statement of the stream's length, so an \
+         impossible one is a truncated payload rather than something to clamp"
+    );
+}
+
+#[test]
+fn random_rle_streams_terminate_and_never_panic() {
+    // A seeded stand-in for the fuzzer, so the bound on the run loop is checked
+    // against inputs nobody chose. Deterministic: the same 20k streams every
+    // run, so a failure is reproducible from the seed alone.
+    let mut state = 0x2545_F491_4F6C_DD1Du64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+
+    // Both grammars: RLE4 packs two pixels per absolute byte and alternates
+    // nibbles in an encoded run, so it is a different walk and not a constant.
+    let heads: [Vec<u8>; 2] = [
+        fixture("8bpp-rle8-4x3")[..40 + 16].to_vec(),
+        fixture("4bpp-rle4-6x2")[..40 + 16].to_vec(),
+    ];
+
+    for case in 0..20_000u32 {
+        let len = 2 + (next() % 60) as usize;
+        let mut src = heads[(case % 2) as usize].clone();
+        // biSizeImage = 0, i.e. "the stream is the rest of the payload", so the
+        // run loop and not the length check is what is under test.
+        src[20..24].copy_from_slice(&0u32.to_le_bytes());
+        for _ in 0..len {
+            src.push((next() >> 24) as u8);
+        }
+        let header = DibHeader::parse(&src).expect("the header is intact");
+        assert!(header.is_rle());
+        let mut out = vec![0u8; header.required_buffer_len()];
+        // Ok or Err, never a panic and never a loop: every iteration consumes
+        // at least the two bytes it reads, so the stream is the bound.
+        let _ = header
+            .decode_into(&src, &mut out, AlphaMode::Guess)
+            .map_err(|e| assert!(e.offset <= src.len(), "case {case}: offset out of range"));
+    }
+}
+
+// ------------------------------------------------- colour management --------
+
+#[test]
+fn v5_endpoints_and_gamma_are_reported_verbatim() {
+    let header = DibHeader::parse(&fixture("32bpp-v5-calibrated-endpoints-2x1")).unwrap();
+    assert_eq!(header.version(), HeaderVersion::V5);
+    assert_eq!(header.color_space(), rclip_dib::LCS_CALIBRATED_RGB);
+    assert!(header.is_calibrated());
+
+    let e = header.endpoints().expect("V5 carries a CIEXYZTRIPLE");
+    // FXPT2DOT30: two integer bits, thirty fraction bits.
+    let (rx, ry, rz) = e.red.to_f32();
+    assert!((rx - 0.6400).abs() < 1e-6, "ciexyzRed.X was {rx}");
+    assert!((ry - 0.3300).abs() < 1e-6);
+    assert!((rz - 0.0300).abs() < 1e-6);
+    assert!((e.green.to_f32().1 - 0.6000).abs() < 1e-6);
+    assert!((e.blue.to_f32().2 - 0.7900).abs() < 1e-6);
+    assert_eq!(
+        e.red.x, 687194767,
+        "the raw field, not the float, is stored"
+    );
+
+    let g = header.gamma().expect("V5 carries three gamma DWORDs");
+    assert_eq!(g.red, 0x0002_3333, "unsigned 16.16");
+    assert!((g.to_f32().0 - 2.2).abs() < 1e-4);
+}
+
+#[test]
+fn a_40_byte_header_has_no_colour_management_block_to_report() {
+    let header = DibHeader::parse(&fixture("24bpp-bottom-up-2x2")).unwrap();
+    assert_eq!(header.endpoints(), None);
+    assert_eq!(header.gamma(), None);
+    assert!(
+        !header.is_calibrated(),
+        "LCS_CALIBRATED_RGB is the default value of a field this header does not have"
+    );
+}
+
+#[test]
+fn the_colour_management_block_does_not_move_the_pixels() {
+    // The whole point of reporting rather than applying: gamma 2.2 and a set of
+    // primaries must not change a single decoded byte.
+    let calibrated = decode("32bpp-v5-calibrated-endpoints-2x1", AlphaMode::Straight);
+    assert_eq!(calibrated, rgba(&[[255, 0, 0, 255], [0, 0, 255, 128]]));
+}
+
+// -------------------------------------------------------- CF_DIB encoder ----
+
+#[test]
+fn cf_dib_encodes_a_40_byte_24bpp_bi_rgb_payload() {
+    let pixels = rgba(&[RED, GREEN, BLUE, WHITE]);
+    let encoded = rclip_dib::encode_dib(2, 2, &pixels, rclip_dib::Flatten::Discard).unwrap();
+
+    let header = DibHeader::parse(&encoded).unwrap();
+    assert_eq!(
+        header.version(),
+        HeaderVersion::Info,
+        "CF_DIB, not CF_DIBV5"
+    );
+    assert_eq!(header.bit_count(), 24);
+    assert_eq!(header.compression(), rclip_dib::BI_RGB);
+    assert!(
+        !header.is_top_down(),
+        "bottom-up is what the legacy consumers CF_DIB exists for expect"
+    );
+    assert!(
+        !header.masks().alpha.is_present(),
+        "a BITMAPINFOHEADER has no alpha mask field at all"
+    );
+    assert_eq!(
+        header.endpoints(),
+        None,
+        "a BITMAPINFOHEADER has nowhere to put a colour space"
+    );
+
+    let decoded = rclip_dib::decode(&encoded, AlphaMode::Straight).unwrap();
+    assert_eq!((decoded.width, decoded.height), (2, 2));
+    assert_eq!(
+        decoded.pixels, pixels,
+        "opaque input must survive the round trip byte for byte"
+    );
+}
+
+#[test]
+fn cf_dib_pads_odd_rows_to_a_four_byte_stride() {
+    // 3 pixels x 3 bytes = 9 bytes of colour, 12 on the wire. The classic DIB
+    // off-by-one: get it wrong and the image shears one pixel per row.
+    let pixels = rgba(&[RED, GREEN, BLUE, WHITE, BLACK, RED]);
+    let len = rclip_dib::encoded_dib_len(3, 2).unwrap();
+    assert_eq!(len, 40 + 12 * 2);
+
+    let encoded = rclip_dib::encode_dib(3, 2, &pixels, rclip_dib::Flatten::Discard).unwrap();
+    assert_eq!(encoded.len(), len);
+    let header = DibHeader::parse(&encoded).unwrap();
+    assert_eq!(header.stride(), 12);
+    assert_eq!(
+        &encoded[40 + 9..40 + 12],
+        &[0, 0, 0],
+        "the pad is written, not left as whatever the caller's buffer held"
+    );
+
+    assert_eq!(
+        rclip_dib::decode(&encoded, AlphaMode::Straight)
+            .unwrap()
+            .pixels,
+        pixels
+    );
+}
+
+#[test]
+fn cf_dib_flattens_alpha_the_way_the_caller_asked() {
+    // Half-transparent pure red over white.
+    let pixels = rgba(&[[255, 0, 0, 128]]);
+
+    let discarded = rclip_dib::encode_dib(1, 1, &pixels, rclip_dib::Flatten::Discard).unwrap();
+    assert_eq!(
+        rclip_dib::decode(&discarded, AlphaMode::Straight)
+            .unwrap()
+            .pixels,
+        rgba(&[[255, 0, 0, 255]]),
+        "Discard keeps the colour a straight-alpha pixel actually holds"
+    );
+
+    let over = rclip_dib::encode_dib(1, 1, &pixels, rclip_dib::Flatten::OVER_WHITE).unwrap();
+    let got = rclip_dib::decode(&over, AlphaMode::Straight)
+        .unwrap()
+        .pixels;
+    assert_eq!(got[0], 255, "red stays at full over a white background");
+    assert!(
+        got[1].abs_diff(127) <= 1 && got[2].abs_diff(127) <= 1,
+        "green and blue should come halfway up to white, got {got:?}"
+    );
+    assert_eq!(
+        got[3], 255,
+        "CF_DIB has no alpha channel to be transparent in"
+    );
+}
+
+#[test]
+fn cf_dib_compositing_is_exact_at_both_ends() {
+    let opaque = rgba(&[[10, 200, 90, 255]]);
+    assert_eq!(
+        rclip_dib::decode(
+            &rclip_dib::encode_dib(1, 1, &opaque, rclip_dib::Flatten::OVER_WHITE).unwrap(),
+            AlphaMode::Straight
+        )
+        .unwrap()
+        .pixels,
+        opaque,
+        "alpha 255 must land exactly on the source colour, not one level off"
+    );
+
+    let clear = rgba(&[[10, 200, 90, 0]]);
+    assert_eq!(
+        rclip_dib::decode(
+            &rclip_dib::encode_dib(1, 1, &clear, rclip_dib::Flatten::Over([1, 2, 3])).unwrap(),
+            AlphaMode::Straight
+        )
+        .unwrap()
+        .pixels,
+        rgba(&[[1, 2, 3, 255]]),
+        "alpha 0 must land exactly on the background"
+    );
+}
+
+#[test]
+fn cf_dib_encode_into_a_borrowed_buffer_matches_the_owned_form() {
+    let pixels = rgba(&[RED, GREEN, BLUE, WHITE]);
+    let mut buf = vec![0xAAu8; rclip_dib::encoded_dib_len(2, 2).unwrap()];
+    let n =
+        rclip_dib::encode_dib_into(2, 2, &pixels, rclip_dib::Flatten::Discard, &mut buf).unwrap();
+    assert_eq!(n, buf.len());
+    assert_eq!(
+        buf,
+        rclip_dib::encode_dib(2, 2, &pixels, rclip_dib::Flatten::Discard).unwrap()
+    );
+}
+
+#[test]
+fn cf_dib_encode_rejects_bad_sizes() {
+    let pixels = [0u8; 4];
+    assert_eq!(
+        rclip_dib::encode_dib(0, 1, &pixels, rclip_dib::Flatten::Discard)
+            .unwrap_err()
+            .kind,
+        ErrorKind::Malformed
+    );
+    assert_eq!(
+        rclip_dib::encoded_dib_len(1 << 20, 1 << 20)
+            .unwrap_err()
+            .kind,
+        ErrorKind::TooLarge
+    );
+    // Two pixels declared, one supplied.
+    assert_eq!(
+        rclip_dib::encode_dib(2, 1, &pixels, rclip_dib::Flatten::Discard)
+            .unwrap_err()
+            .kind,
+        ErrorKind::BadLength
+    );
+    // A destination shorter than the payload.
+    let mut small = [0u8; 8];
+    assert_eq!(
+        rclip_dib::encode_dib_into(1, 1, &pixels, rclip_dib::Flatten::Discard, &mut small)
+            .unwrap_err()
+            .kind,
+        ErrorKind::BadLength
+    );
+}
+
 // --------------------------------------------------------------- corpus -----
 
 #[test]
@@ -610,7 +993,7 @@ fn sidecar_verdicts_match_reality() {
         seen += 1;
     }
     assert!(
-        seen >= 12,
+        seen >= 22,
         "expected the full synthetic corpus, found {seen}"
     );
 }

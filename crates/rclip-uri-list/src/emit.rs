@@ -93,9 +93,11 @@ mod with_alloc {
     /// and RFC 2483 §5 asks for CRLF; readers that only split on LF still cope,
     /// because they trim.
     ///
-    /// URIs are written through verbatim. Percent-encoding them is the caller's
-    /// job — this crate does not know whether a given byte in a path was meant
-    /// literally.
+    /// URIs are written through **verbatim**. That is deliberate and is not the
+    /// same thing as "this crate cannot encode": a `&str` handed to this
+    /// function is already a URI, and re-encoding one would double every `%`
+    /// it already contains. Turn a *path* into a URI with [`file_uri`] first,
+    /// which is the direction where the escaping question has an answer.
     #[must_use]
     pub fn write_uri_list<'a, I>(uris: I) -> Vec<u8>
     where
@@ -129,6 +131,52 @@ mod with_alloc {
         out
     }
 
+    /// Build a `file://` URI for an absolute path.
+    ///
+    /// The path is percent-encoded with [`EncodeSet::Path`], so `/` stays a
+    /// separator and everything that would change the URI's meaning — a space,
+    /// a `#`, a `?`, a literal `%`, a control byte, anything non-ASCII — is
+    /// escaped. See [`EncodeSet`] for why the set is neither larger nor
+    /// smaller than that.
+    ///
+    /// Takes bytes, so a POSIX path that is not UTF-8 survives; `&str` works
+    /// too. A leading `/` is supplied if the path lacks one, because
+    /// `file://home/me` parses `home` as an *authority* — a hostname — and not
+    /// as the first path component. That is the one malformation that changes
+    /// what the URI means rather than merely how it looks, and it is a
+    /// syntactic category error rather than path resolution, which this crate
+    /// does not do.
+    ///
+    /// ```
+    /// use rclip_uri_list::emit::file_uri;
+    ///
+    /// assert_eq!(file_uri("/home/me/a file.txt"), "file:///home/me/a%20file.txt");
+    /// // Sub-delims are legal in a path and are left alone, exactly as
+    /// // `g_filename_to_uri` leaves them.
+    /// assert_eq!(file_uri("/tmp/it's (1)&2.txt"), "file:///tmp/it's%20(1)&2.txt");
+    /// ```
+    ///
+    /// [`EncodeSet`]: crate::uri::EncodeSet
+    /// [`EncodeSet::Path`]: crate::uri::EncodeSet::Path
+    #[must_use]
+    pub fn file_uri<P: AsRef<[u8]>>(path: P) -> alloc::string::String {
+        use crate::uri::{percent_encode, EncodeSet};
+        use core::fmt::Write as _;
+
+        let path = path.as_ref();
+        let mut out = alloc::string::String::with_capacity(
+            "file:///".len() + crate::uri::encoded_len(path, EncodeSet::Path),
+        );
+        out.push_str("file://");
+        if !path.starts_with(b"/") {
+            out.push('/');
+        }
+        // Infallible: writing into a String cannot fail, and `PercentEncode`
+        // yields nothing but ASCII.
+        let _ = write!(out, "{}", percent_encode(path, EncodeSet::Path));
+        out
+    }
+
     /// Build the bytes for one [`Offer`].
     ///
     /// Lets a source loop over [`super::RECOMMENDED`] without matching on the
@@ -144,4 +192,4 @@ mod with_alloc {
 }
 
 #[cfg(feature = "alloc")]
-pub use with_alloc::{write, write_copied_files, write_uri_list};
+pub use with_alloc::{file_uri, write, write_copied_files, write_uri_list};

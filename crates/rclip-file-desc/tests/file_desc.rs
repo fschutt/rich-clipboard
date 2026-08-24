@@ -8,8 +8,10 @@
 
 use rclip_core::ErrorKind;
 use rclip_file_desc::{
-    file_attribute, Builder, FileDescriptor, FileGroupDescriptor, Flags, PointL, RawDescriptor,
-    SizeL, DESCRIPTOR_LEN, FILE_NAME_UNITS, GROUP_HEADER_LEN, MAX_WRITABLE_NAME_UNITS,
+    file_attribute, Builder, BuilderA, FileDescriptor, FileDescriptorA, FileGroupDescriptor,
+    FileGroupDescriptorA, Flags, PointL, RawDescriptor, SizeL, DESCRIPTOR_A_LEN, DESCRIPTOR_LEN,
+    FILE_NAME_BYTES, FILE_NAME_UNITS, GROUP_HEADER_LEN, MAX_WRITABLE_NAME_BYTES,
+    MAX_WRITABLE_NAME_UNITS,
 };
 
 fn fixture(name: &str) -> Vec<u8> {
@@ -17,7 +19,7 @@ fn fixture(name: &str) -> Vec<u8> {
     std::fs::read(format!("{p}rclip-file-desc/{name}")).expect("fixture")
 }
 
-fn sidecar_expectations() -> Vec<(String, String)> {
+fn sidecar_expectations() -> Vec<(String, String, String)> {
     let dir = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../corpus/synthetic/rclip-file-desc"
@@ -35,8 +37,14 @@ fn sidecar_expectations() -> Vec<(String, String)> {
             .and_then(|s| s.split('"').nth(1))
             .expect("sidecar has an \"expect\" field")
             .to_owned();
+        let format = json
+            .split("\"format\"")
+            .nth(1)
+            .and_then(|s| s.split('"').nth(1))
+            .expect("sidecar has a \"format\" field")
+            .to_owned();
         let stem = path.file_stem().unwrap().to_str().unwrap().to_owned();
-        out.push((format!("{stem}.bin"), expect));
+        out.push((format!("{stem}.bin"), expect, format));
     }
     out.sort();
     out
@@ -91,9 +99,22 @@ fn flags_debug_names_the_bits_it_knows() {
 fn every_fixture_matches_its_sidecar() {
     let cases = sidecar_expectations();
     assert!(cases.len() >= 4, "corpus should not silently shrink");
-    for (name, expect) in cases {
+    let mut saw_ansi = false;
+    for (name, expect, format) in cases {
         let bytes = fixture(&name);
-        let parsed = FileGroupDescriptor::parse(&bytes);
+        // Nothing in the payload says which layout it is -- a descriptor is 592
+        // bytes wide and 332 ANSI, and neither carries a marker. The clipboard
+        // format name is the only thing that decides, which is why this crate
+        // refuses to sniff. So the sweep routes on the sidecar's format, the
+        // same way the corpus gate does.
+        let is_ansi = format.eq_ignore_ascii_case("FILEGROUPDESCRIPTORA")
+            || format.eq_ignore_ascii_case("CFSTR_FILEDESCRIPTOR");
+        saw_ansi |= is_ansi;
+        let parsed = if is_ansi {
+            FileGroupDescriptorA::parse(&bytes).map(|_| ())
+        } else {
+            FileGroupDescriptor::parse(&bytes).map(|_| ())
+        };
         match expect.as_str() {
             "ok" => {
                 parsed.unwrap_or_else(|e| panic!("{name} is declared ok but failed: {e}"));
@@ -107,6 +128,11 @@ fn every_fixture_matches_its_sidecar() {
             other => panic!("{name}: unknown expect value {other:?}"),
         }
     }
+    assert!(
+        saw_ansi,
+        "the ANSI layout has no corpus fixture, so this sweep only ever exercises the wide \
+         reading and the format-based routing above is untested"
+    );
 }
 
 #[test]
@@ -446,7 +472,7 @@ fn an_odd_length_utf16_name_is_a_bad_length() {
 
 #[test]
 fn every_prefix_of_every_fixture_either_parses_or_errors() {
-    for (name, _) in sidecar_expectations() {
+    for (name, _, _) in sidecar_expectations() {
         let bytes = fixture(&name);
         for len in 0..=bytes.len() {
             if let Ok(group) = FileGroupDescriptor::parse(&bytes[..len]) {
@@ -457,5 +483,326 @@ fn every_prefix_of_every_fixture_either_parses_or_errors() {
                 }
             }
         }
+    }
+}
+
+// ------------------------------------------------- FILEGROUPDESCRIPTORA -----
+//
+// The ANSI twin. Same struct, one field narrower: `CHAR cFileName[260]` instead
+// of `WCHAR`, so 332 bytes per descriptor rather than 592.
+
+#[test]
+fn the_ansi_struct_sizes_are_what_we_encode() {
+    // 4 + 16 + 8 + 8 + 4 + 8 + 8 + 8 + 4 + 4 + 260. Same 72-byte prefix, a name
+    // field half the width.
+    assert_eq!(DESCRIPTOR_A_LEN, 332);
+    assert_eq!(GROUP_HEADER_LEN + DESCRIPTOR_A_LEN, 336);
+    assert_eq!(FILE_NAME_BYTES, 260, "cFileName is CHAR[MAX_PATH]");
+    assert_eq!(
+        MAX_WRITABLE_NAME_BYTES, 259,
+        "one byte is reserved for the NUL"
+    );
+    assert_eq!(
+        DESCRIPTOR_LEN - DESCRIPTOR_A_LEN,
+        260,
+        "the two differ by exactly the extra byte per name character"
+    );
+}
+
+fn ansi_group() -> Vec<u8> {
+    let mut b = BuilderA::new();
+    b.push_ansi_name(
+        RawDescriptor::new()
+            .with_file_size(4096)
+            .with_attributes(file_attribute::NORMAL)
+            .with_progress_ui(),
+        b"report.pdf",
+    )
+    .unwrap();
+    b.push_ansi_name(RawDescriptor::new(), b"sub\\notes.txt")
+        .unwrap();
+    b.finish()
+}
+
+#[test]
+fn an_ansi_group_round_trips_through_the_builder() {
+    let bytes = ansi_group();
+    assert_eq!(bytes.len(), GROUP_HEADER_LEN + 2 * DESCRIPTOR_A_LEN);
+
+    let group = FileGroupDescriptorA::parse(&bytes).unwrap();
+    assert_eq!(group.len(), 2);
+    assert!(!group.is_empty());
+
+    let first = group.get(0).unwrap();
+    assert_eq!(first.file_name_ansi(), b"report.pdf");
+    assert_eq!(first.file_size(), Some(4096));
+    assert_eq!(first.file_attributes(), Some(file_attribute::NORMAL));
+    assert!(first.wants_progress_ui());
+    assert!(!first.is_directory());
+
+    let second = group.get(1).unwrap();
+    assert_eq!(
+        second.file_name_ansi(),
+        b"sub\\notes.txt",
+        "a relative path is what real producers put in cFileName for a tree"
+    );
+    // A clear flag reads as None, never as the plausible-looking zero.
+    assert_eq!(second.file_size(), None);
+    assert_eq!(second.file_attributes(), None);
+    assert_eq!(second.last_write_time(), None);
+
+    // Iteration and indexing must agree.
+    let walked: Vec<FileDescriptorA<'_>> = group.iter().collect();
+    assert_eq!(walked.len(), 2);
+    assert_eq!(walked[0], first);
+    assert_eq!(group.iter().len(), 2, "ExactSizeIterator");
+
+    // And re-emitting a parsed descriptor is byte-identical.
+    let mut again = BuilderA::new();
+    for d in &group {
+        again.push_descriptor(&d).unwrap();
+    }
+    assert_eq!(again.finish(), bytes);
+}
+
+#[test]
+fn the_72_byte_prefix_is_identical_in_both_spellings() {
+    // This is the whole reason both parsers share one reader: everything before
+    // cFileName is byte-for-byte the same struct.
+    let raw = RawDescriptor::new()
+        .with_file_size(0x1_0000_0007)
+        .with_attributes(file_attribute::ARCHIVE)
+        .with_last_write_time(0x01D9_ABCD_1234_5678)
+        .with_clsid([7u8; 16])
+        .with_icon(SizeL { cx: 32, cy: 48 }, PointL { x: -1, y: 2 });
+
+    let mut w = Builder::new();
+    w.push(raw, "x").unwrap();
+    let wide = w.finish();
+    let mut a = BuilderA::new();
+    a.push_ansi_name(raw, b"x").unwrap();
+    let ansi = a.finish();
+
+    assert_eq!(
+        wide[GROUP_HEADER_LEN..GROUP_HEADER_LEN + 72],
+        ansi[GROUP_HEADER_LEN..GROUP_HEADER_LEN + 72]
+    );
+
+    let wd = FileGroupDescriptor::parse(&wide).unwrap().get(0).unwrap();
+    let ad = FileGroupDescriptorA::parse(&ansi).unwrap().get(0).unwrap();
+    assert_eq!(wd.raw(), ad.raw());
+    assert_eq!(wd.file_size(), ad.file_size());
+    assert_eq!(wd.last_write_time(), ad.last_write_time());
+    assert_eq!(wd.clsid(), ad.clsid());
+    assert_eq!(wd.icon_size(), ad.icon_size());
+    assert_eq!(wd.icon_position(), ad.icon_position());
+}
+
+#[test]
+fn an_ansi_c_items_is_checked_against_the_buffer_before_anything_iterates() {
+    let mut bytes = ansi_group();
+    bytes[..4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+    assert_eq!(
+        FileGroupDescriptorA::parse(&bytes).unwrap_err().kind,
+        ErrorKind::TooLarge,
+        "0xFFFFFFFF x 332 is a 1.3 TiB read otherwise"
+    );
+
+    // One descriptor promised, most of it missing.
+    let short = &ansi_group()[..GROUP_HEADER_LEN + 100];
+    assert_eq!(
+        FileGroupDescriptorA::parse(short).unwrap_err().kind,
+        ErrorKind::TooLarge
+    );
+
+    // Not even the cItems word.
+    assert_eq!(
+        FileGroupDescriptorA::parse(&[0u8, 0, 0]).unwrap_err().kind,
+        ErrorKind::UnexpectedEof
+    );
+
+    // An empty group is legal, if pointless.
+    let zero = 0u32.to_le_bytes();
+    let empty = FileGroupDescriptorA::parse(&zero).unwrap();
+    assert!(empty.is_empty());
+    assert_eq!(empty.iter().count(), 0);
+}
+
+#[test]
+fn the_ansi_name_field_is_truncated_at_its_first_nul() {
+    // Everything after the terminator is padding and must not leak out, even
+    // when a producer left something in it.
+    let mut bytes = ansi_group();
+    let name_at = GROUP_HEADER_LEN + 72;
+    bytes[name_at + "report.pdf".len() + 1..name_at + 40].fill(b'X');
+
+    let d = FileGroupDescriptorA::parse(&bytes).unwrap().get(0).unwrap();
+    assert_eq!(d.file_name_ansi(), b"report.pdf");
+}
+
+#[test]
+fn a_name_that_fills_the_field_leaves_no_room_for_the_terminator() {
+    let mut b = BuilderA::new();
+    assert_eq!(
+        b.push_ansi_name(RawDescriptor::new(), &[b'a'; FILE_NAME_BYTES])
+            .unwrap_err()
+            .kind,
+        ErrorKind::TooLarge
+    );
+    // One byte shorter fits exactly.
+    b.push_ansi_name(RawDescriptor::new(), &[b'a'; MAX_WRITABLE_NAME_BYTES])
+        .unwrap();
+
+    // An embedded NUL would truncate the name on the way back in, which makes
+    // it a different file rather than a display problem.
+    assert_eq!(
+        b.push_ansi_name(RawDescriptor::new(), b"a\0b")
+            .unwrap_err()
+            .kind,
+        ErrorKind::Malformed
+    );
+}
+
+#[test]
+fn fd_unicode_on_an_ansi_descriptor_is_reported_not_rejected() {
+    let mut b = BuilderA::new();
+    b.push_ansi_name(RawDescriptor::new().with_unicode(), b"confused.txt")
+        .unwrap();
+    let bytes = b.finish();
+
+    let d = FileGroupDescriptorA::parse(&bytes).unwrap().get(0).unwrap();
+    assert!(
+        d.claims_unicode(),
+        "a producer that sets FD_UNICODE on a CHAR[260] name is confused, and \
+         knowing that is more useful than a refusal to parse"
+    );
+    assert_eq!(d.file_name_ansi(), b"confused.txt");
+}
+
+#[test]
+fn the_two_spellings_are_told_apart_by_the_format_name_and_not_by_sniffing() {
+    // A wide group is 596 bytes for one descriptor, which is more than the 336
+    // an ANSI group needs — so it "parses" as ANSI and yields nonsense. That is
+    // the documented contract: which reader to use comes from the clipboard
+    // format name ("FileGroupDescriptorW" vs "FileGroupDescriptor"), because a
+    // length test is wrong exactly when the trailing slack makes both fit.
+    let mut w = Builder::new();
+    w.push(RawDescriptor::new().with_file_size(7), "note.txt")
+        .unwrap();
+    let wide = w.finish();
+
+    let as_ansi = FileGroupDescriptorA::parse(&wide).unwrap();
+    assert_eq!(as_ansi.len(), 1);
+    assert_ne!(
+        as_ansi.get(0).unwrap().file_name_ansi(),
+        b"note.txt",
+        "UTF-16LE read as bytes is not the same name; nothing here pretends otherwise"
+    );
+}
+
+#[test]
+fn one_ansi_descriptor_must_be_exactly_332_bytes() {
+    let bytes = ansi_group();
+    let one = &bytes[GROUP_HEADER_LEN..GROUP_HEADER_LEN + DESCRIPTOR_A_LEN];
+    assert!(FileDescriptorA::parse(one).is_ok());
+    assert_eq!(
+        FileDescriptorA::parse(&one[..DESCRIPTOR_A_LEN - 1])
+            .unwrap_err()
+            .kind,
+        ErrorKind::BadLength
+    );
+    assert_eq!(
+        FileDescriptorA::parse(&bytes[GROUP_HEADER_LEN..])
+            .unwrap_err()
+            .kind,
+        ErrorKind::BadLength,
+        "too long is as wrong as too short: every field is fixed-width"
+    );
+}
+
+#[test]
+fn no_ansi_prefix_panics() {
+    // The fuzzer's job, done by hand: every prefix of a good payload must
+    // answer rather than panic.
+    let bytes = ansi_group();
+    for len in 0..=bytes.len() {
+        if let Ok(group) = FileGroupDescriptorA::parse(&bytes[..len]) {
+            for d in group.iter() {
+                let _ = d.file_name_ansi();
+                let _ = d.file_size();
+            }
+        }
+    }
+}
+
+// The code page is not in the payload, so everything below names it explicitly.
+#[cfg(feature = "codepage")]
+mod ansi_codepage {
+    use super::*;
+    use rclip_codepage::Encoding;
+
+    fn cp1252() -> Encoding {
+        Encoding::from_windows_codepage(1252).expect("windows-1252 is in the table")
+    }
+
+    #[test]
+    fn a_name_encodes_and_decodes_through_a_named_code_page() {
+        let mut b = BuilderA::new();
+        // U+201C, a left double quote: 0x93 in windows-1252 and a C1 control in
+        // Latin-1, which is the pair this whole feature exists to keep apart.
+        b.push_str_with(RawDescriptor::new(), "\u{201C}quoted\u{201D}.txt", cp1252())
+            .unwrap();
+        let bytes = b.finish();
+
+        let d = FileGroupDescriptorA::parse(&bytes).unwrap().get(0).unwrap();
+        assert_eq!(d.file_name_ansi()[0], 0x93);
+        assert_eq!(
+            d.file_name_with(cp1252()).unwrap(),
+            "\u{201C}quoted\u{201D}.txt"
+        );
+    }
+
+    #[test]
+    fn a_character_the_code_page_cannot_represent_is_refused_not_substituted() {
+        let mut b = BuilderA::new();
+        assert_eq!(
+            b.push_str_with(RawDescriptor::new(), "s\u{142}owo.txt", cp1252())
+                .unwrap_err()
+                .kind,
+            ErrorKind::Unsupported,
+            "substituting here would produce a different file name, not a glyph"
+        );
+        assert!(b.is_empty(), "a refused push must leave nothing behind");
+    }
+
+    #[test]
+    fn an_undefined_byte_is_an_error_strictly_and_u_fffd_lossily() {
+        // 0x81 is one of the five bytes windows-1252 leaves unassigned.
+        let mut b = BuilderA::new();
+        b.push_ansi_name(RawDescriptor::new(), b"a\x81b.txt")
+            .unwrap();
+        let bytes = b.finish();
+
+        let d = FileGroupDescriptorA::parse(&bytes).unwrap().get(0).unwrap();
+        assert_eq!(
+            d.file_name_with(cp1252()).unwrap_err().kind,
+            ErrorKind::Malformed
+        );
+        assert_eq!(d.file_name_lossy_with(cp1252()), "a\u{FFFD}b.txt");
+    }
+
+    #[test]
+    fn the_length_limit_is_bytes_and_is_measured_after_encoding() {
+        let mut b = BuilderA::new();
+        // 259 characters that each cost one byte in windows-1252: exactly fits.
+        let name = "a".repeat(MAX_WRITABLE_NAME_BYTES);
+        b.push_str_with(RawDescriptor::new(), &name, cp1252())
+            .unwrap();
+        assert_eq!(
+            b.push_str_with(RawDescriptor::new(), &format!("{name}a"), cp1252())
+                .unwrap_err()
+                .kind,
+            ErrorKind::TooLarge
+        );
     }
 }

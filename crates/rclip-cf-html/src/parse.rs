@@ -84,6 +84,16 @@ pub struct Parsed<'a> {
 /// the `V` of `Version:`. Do not strip anything first — the offsets inside are
 /// relative to this exact buffer.
 ///
+/// A leading UTF-8 BOM is tolerated, and its three bytes are counted as part of
+/// the offsets — see [`Header::bom_len`].
+///
+/// A repeated keyword takes its **first** value, and [`Header::duplicate_keys`]
+/// records that it happened. The spec floats multiple
+/// `StartFragment`/`EndFragment` pairs as a future extension for non-contiguous
+/// selections; nothing has ever emitted one, so a repeat today is a producer bug
+/// or a deliberate ambiguity between two readers, and first-wins is the reading
+/// that cannot be changed by appending to the header.
+///
 /// # Errors
 ///
 /// - [`ErrorKind::BadMagic`] if there is no `Version:` line, which is how a
@@ -102,12 +112,11 @@ pub fn parse(blob: &[u8]) -> Result<CfHtml<'_>> {
 ///
 /// Same failure modes as [`parse`].
 pub fn parse_detailed(blob: &[u8]) -> Result<Parsed<'_>> {
-    // TODO(phase-1): a leading UTF-8 BOM. A producer that prepends `EF BB BF`
-    // shifts every offset in its own header by three relative to where a
-    // BOM-stripping reader would look, and it is not knowable from the bytes
-    // alone which of the two the producer meant. Nothing in the corpus does it
-    // yet; guessing before there is a real capture would just be a different
-    // wrong answer.
+    // A leading UTF-8 BOM is skipped by `parse_header` for the purpose of
+    // reading `Key:Value` lines, and counted for the purpose of everything
+    // else: the reader below is over the *whole* blob, so `header_len` includes
+    // the mark and every offset resolves against the buffer as it arrived. See
+    // `Header::bom_len`.
     let mut r = Reader::new(blob);
     let header = parse_header(&mut r)?;
     let len = blob.len();

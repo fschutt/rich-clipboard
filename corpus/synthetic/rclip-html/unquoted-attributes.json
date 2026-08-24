@@ -1,0 +1,7 @@
+{
+  "format": "text/html",
+  "origin": "synthetic",
+  "description": "All three attribute quoting forms, a boolean attribute, and a self-closing void element",
+  "expect": "ok",
+  "notes": "Decodes to 'xyz'. The unquoted form is what hand-written and mail-client HTML uses and refusing it loses the styling it carried. 'text-decoration: underline line-through' is one declaration naming two lines, which is why the value is scanned for words rather than matched whole."
+}

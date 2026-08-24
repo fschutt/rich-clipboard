@@ -1,0 +1,9 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "Delegate folder wrapping a My Computer root folder item",
+  "notes": "Identified by the class identifier {5E591A74-DF96-48D3-8D67-1733BCEE28BA} sitting 32 bytes before the end of the item, with the owning extension's GUID in the last 16. Where 'the end' is depends on the trailing extension-block offset, which here is the last two bytes of the folder GUID (0x7FB6) -- too large to be an offset, so the region is the whole item.",
+  "leak_allow": "Uuid",
+  "leak_allow_reason": "The UUID in the notes is the published delegate-folder class identifier from libfwsi's documentation, the same on every Windows install. It identifies a format, not a machine."
+}

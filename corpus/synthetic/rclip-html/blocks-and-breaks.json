@@ -1,0 +1,7 @@
+{
+  "format": "text/html",
+  "origin": "synthetic",
+  "description": "Every construct that ends a line, including the ones that must not double up",
+  "expect": "ok",
+  "notes": "Decodes to 'one\\ntwo\\na\\nb\\n\\nc\\nfirst\\nsecond\\nHeading\\nafter'. One <br> is one newline and not two - it is a line break, not a block boundary, and counting it as both is the obvious bug. Leading indentation and the trailing break produce nothing: breaks are emitted only when text follows them. <li> without </li> closes the previous item rather than nesting, and <h2> is bold."
+}

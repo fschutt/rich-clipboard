@@ -1,0 +1,9 @@
+{
+  "format": "InternetShortcut",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "The same PIDL with its WritePrivateProfileStruct checksum byte corrupted",
+  "notes": "The file parses, so the fixture expects \"ok\"; it is UrlFile::id_list_bytes that fails, with ErrorKind::Malformed. GetPrivateProfileStruct rejects a bad checksum too, which is why this is an error rather than a warning -- a wrong checksum usually means the value was truncated, and a truncated PIDL parses into confident nonsense.",
+  "leak_allow": "HexRun",
+  "leak_allow_reason": "Same hand-built PIDL as idlist-pidl.bin with one digit changed; the hex run is the fixture, not a token."
+}

@@ -88,14 +88,18 @@ ordering, the full §5 ladder, and both §7 escape layers.
   everywhere, so it is accepted in every value — rejecting `Comment=either\;or` loses the comment
   and gains nothing.
 
+## The shared shortcut type
+
+A `Type=Link` entry's destination comes back as `ShortcutTarget<'a>`, re-exported from
+`rclip_core::shortcut` and shared with `rclip-url-file`, `rclip-webloc`, `rclip-shell-link` and
+`rclip-uri-list` — see `plan/PLAN.md` §4.10.
+
 ## Not implemented yet
 
 - **Duplicate detection.** §3.2 forbids duplicate group names and §3.3 duplicate keys within a
   group. Detecting either is quadratic, and this parser's input arrives from another process, so a
   payload with a hundred thousand keys would turn the check into a hang. Lookups return the *first*
   match, which is what GLib does; duplicates are not diagnosed. Deliberate, not an oversight.
-- `// TODO(phase-4):` `ShortcutTarget` is a byte-identical mirror of the definition in
-  `rclip-url-file`; Phase 4 hoists one copy into `rclip-core` and deletes the mirrors.
 - No serializer. §3 asks a compliant implementation that rewrites a file to preserve fields it does
   not understand, which is a whole design of its own; nothing in the plan needs it before Phase 4.
 - `%i` expansion, `TryExec` resolution, `OnlyShowIn`/`NotShowIn` evaluation against

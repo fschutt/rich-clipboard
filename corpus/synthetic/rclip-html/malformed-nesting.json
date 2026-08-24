@@ -1,0 +1,7 @@
+{
+  "format": "text/html",
+  "origin": "synthetic",
+  "description": "Mismatched nesting, a stray end tag with nothing open, and an unclosed element at EOF - the normal case in clipboard HTML",
+  "expect": "ok",
+  "notes": "Decodes to 'bothitalicplaintail'. 'both' is bold+italic; 'italic' is italic only - the </b> closes the <i> that was open inside it and then reconstructs it, which is HTML5's adoption agency algorithm reduced to its one visible consequence; 'plain' has no styling; 'tail' is italic from the unclosed <em>. The </p> and </div> close nothing and are dropped rather than closing the innermost element, which would put every later style one level off."
+}

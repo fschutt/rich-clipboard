@@ -12,9 +12,14 @@
 //! `HGLOBAL`, or an `IStorage`) rather than a byte layout, so it belongs to the
 //! platform backend and not to a codec.
 //!
-//! TODO(phase-1): `FILEGROUPDESCRIPTORA`. Same shape with `CHAR cFileName[260]`,
-//! so 332 bytes per descriptor, and the same unknowable-codepage problem as
-//! `CF_HDROP`'s `fWide == 0`. Deferred until a real capture needs it.
+//! Both spellings are here. `CFSTR_FILEDESCRIPTORW` (`"FileGroupDescriptorW"`)
+//! is the one every modern source writes; `CFSTR_FILEDESCRIPTORA`
+//! (`"FileGroupDescriptor"`, no suffix) is the same struct with
+//! `CHAR cFileName[260]`, so 332 bytes per descriptor instead of 592. See
+//! [`FileGroupDescriptorA`], and note that its names arrive in the *writer's*
+//! ANSI code page, which is not in the payload — the same unknowable-codepage
+//! problem as `CF_HDROP`'s `fWide == 0`, and solved the same way, with the
+//! default-off `codepage` feature.
 //!
 //! ```text
 //! FILEGROUPDESCRIPTORW
@@ -80,6 +85,15 @@
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
+pub mod ansi;
+
+#[cfg(feature = "alloc")]
+pub use ansi::Builder as BuilderA;
+pub use ansi::{
+    Descriptors as DescriptorsA, FileDescriptorA, FileGroupDescriptorA, DESCRIPTOR_A_LEN,
+    FILE_NAME_BYTES, MAX_WRITABLE_NAME_BYTES,
+};
+
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
@@ -117,7 +131,7 @@ const OFF_ACCESS: usize = 48;
 const OFF_WRITE: usize = 56;
 const OFF_SIZE_HIGH: usize = 64;
 const OFF_SIZE_LOW: usize = 68;
-const OFF_FILENAME: usize = 72;
+pub(crate) const OFF_FILENAME: usize = 72;
 
 const _: () = assert!(OFF_FILENAME + FILE_NAME_UNITS * 2 == DESCRIPTOR_LEN);
 
@@ -464,6 +478,121 @@ impl RawDescriptor {
     }
 }
 
+impl RawDescriptor {
+    /// Read the 72 fixed bytes that precede `cFileName`.
+    ///
+    /// Shared by the W and A parsers: the two structs differ only in the width
+    /// of the trailing name field, so reading the prefix twice would be two
+    /// places for the offset table to drift.
+    pub(crate) fn parse_fixed(r: &mut Reader<'_>) -> Result<Self> {
+        let flags = Flags::from_bits(r.u32_le()?);
+        let clsid = r.guid()?;
+        let icon_size = SizeL {
+            cx: r.i32_le()?,
+            cy: r.i32_le()?,
+        };
+        let icon_position = PointL {
+            x: r.i32_le()?,
+            y: r.i32_le()?,
+        };
+        let file_attributes = r.u32_le()?;
+        let creation_time = filetime(r)?;
+        let last_access_time = filetime(r)?;
+        let last_write_time = filetime(r)?;
+        // The size arrives as two DWORDs, high first in the declaration but
+        // little-endian on the wire, so read both and recombine rather than
+        // reading a u64 across them.
+        let high = r.u32_le()?;
+        let low = r.u32_le()?;
+        let file_size = (u64::from(high) << 32) | u64::from(low);
+        Ok(Self {
+            flags,
+            clsid,
+            icon_size,
+            icon_position,
+            file_attributes,
+            creation_time,
+            last_access_time,
+            last_write_time,
+            file_size,
+        })
+    }
+
+    // The flag-gated views. Both descriptor types delegate here so that "which
+    // flag guards which field" is written down once.
+
+    pub(crate) const fn opt_clsid(self) -> Option<[u8; 16]> {
+        if self.flags.contains(Flags::CLSID) {
+            Some(self.clsid)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) const fn opt_icon_size(self) -> Option<SizeL> {
+        if self.flags.contains(Flags::SIZEPOINT) {
+            Some(self.icon_size)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) const fn opt_icon_position(self) -> Option<PointL> {
+        if self.flags.contains(Flags::SIZEPOINT) {
+            Some(self.icon_position)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) const fn opt_file_attributes(self) -> Option<u32> {
+        if self.flags.contains(Flags::ATTRIBUTES) {
+            Some(self.file_attributes)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) const fn opt_creation_time(self) -> Option<u64> {
+        if self.flags.contains(Flags::CREATETIME) {
+            Some(self.creation_time)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) const fn opt_last_access_time(self) -> Option<u64> {
+        if self.flags.contains(Flags::ACCESSTIME) {
+            Some(self.last_access_time)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) const fn opt_last_write_time(self) -> Option<u64> {
+        if self.flags.contains(Flags::WRITESTIME) {
+            Some(self.last_write_time)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) const fn opt_file_size(self) -> Option<u64> {
+        if self.flags.contains(Flags::FILESIZE) {
+            Some(self.file_size)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) const fn is_directory(self) -> bool {
+        match self.opt_file_attributes() {
+            Some(a) => a & file_attribute::DIRECTORY != 0,
+            None => false,
+        }
+    }
+}
+
 /// One `FILEDESCRIPTORW`.
 ///
 /// Borrows the name from the input buffer; constructing one allocates nothing.
@@ -486,42 +615,11 @@ impl<'a> FileDescriptor<'a> {
             return Err(Error::new(ErrorKind::BadLength, 0));
         }
         let mut r = Reader::new(bytes);
-        let flags = Flags::from_bits(r.u32_le()?);
-        let clsid = r.guid()?;
-        let icon_size = SizeL {
-            cx: r.i32_le()?,
-            cy: r.i32_le()?,
-        };
-        let icon_position = PointL {
-            x: r.i32_le()?,
-            y: r.i32_le()?,
-        };
-        let file_attributes = r.u32_le()?;
-        let creation_time = filetime(&mut r)?;
-        let last_access_time = filetime(&mut r)?;
-        let last_write_time = filetime(&mut r)?;
-        // The size arrives as two DWORDs, high first in the declaration but
-        // little-endian on the wire, so read both and recombine rather than
-        // reading a u64 across them.
-        let high = r.u32_le()?;
-        let low = r.u32_le()?;
-        let file_size = (u64::from(high) << 32) | u64::from(low);
+        let raw = RawDescriptor::parse_fixed(&mut r)?;
         debug_assert_eq!(r.pos(), OFF_FILENAME);
         // Fixed 260-unit field: the name is whatever precedes the first NUL,
         // and the rest of the field is padding that must not leak into it.
         let name = r.utf16_fixed(FILE_NAME_UNITS)?;
-
-        let raw = RawDescriptor {
-            flags,
-            clsid,
-            icon_size,
-            icon_position,
-            file_attributes,
-            creation_time,
-            last_access_time,
-            last_write_time,
-            file_size,
-        };
         Ok(Self { raw, name })
     }
 
@@ -563,41 +661,25 @@ impl<'a> FileDescriptor<'a> {
     /// `clsid`, or `None` unless `FD_CLSID` is set.
     #[must_use]
     pub const fn clsid(&self) -> Option<[u8; 16]> {
-        if self.raw.flags.contains(Flags::CLSID) {
-            Some(self.raw.clsid)
-        } else {
-            None
-        }
+        self.raw.opt_clsid()
     }
 
     /// Icon size, or `None` unless `FD_SIZEPOINT` is set.
     #[must_use]
     pub const fn icon_size(&self) -> Option<SizeL> {
-        if self.raw.flags.contains(Flags::SIZEPOINT) {
-            Some(self.raw.icon_size)
-        } else {
-            None
-        }
+        self.raw.opt_icon_size()
     }
 
     /// Icon position, or `None` unless `FD_SIZEPOINT` is set.
     #[must_use]
     pub const fn icon_position(&self) -> Option<PointL> {
-        if self.raw.flags.contains(Flags::SIZEPOINT) {
-            Some(self.raw.icon_position)
-        } else {
-            None
-        }
+        self.raw.opt_icon_position()
     }
 
     /// `dwFileAttributes`, or `None` unless `FD_ATTRIBUTES` is set.
     #[must_use]
     pub const fn file_attributes(&self) -> Option<u32> {
-        if self.raw.flags.contains(Flags::ATTRIBUTES) {
-            Some(self.raw.file_attributes)
-        } else {
-            None
-        }
+        self.raw.opt_file_attributes()
     }
 
     /// `ftCreationTime` in 100ns ticks since 1601-01-01 UTC, or `None` unless
@@ -607,31 +689,19 @@ impl<'a> FileDescriptor<'a> {
     /// and a calendar is not a dependency a clipboard codec should carry.
     #[must_use]
     pub const fn creation_time(&self) -> Option<u64> {
-        if self.raw.flags.contains(Flags::CREATETIME) {
-            Some(self.raw.creation_time)
-        } else {
-            None
-        }
+        self.raw.opt_creation_time()
     }
 
     /// `ftLastAccessTime`, or `None` unless `FD_ACCESSTIME` is set.
     #[must_use]
     pub const fn last_access_time(&self) -> Option<u64> {
-        if self.raw.flags.contains(Flags::ACCESSTIME) {
-            Some(self.raw.last_access_time)
-        } else {
-            None
-        }
+        self.raw.opt_last_access_time()
     }
 
     /// `ftLastWriteTime`, or `None` unless `FD_WRITESTIME` is set.
     #[must_use]
     pub const fn last_write_time(&self) -> Option<u64> {
-        if self.raw.flags.contains(Flags::WRITESTIME) {
-            Some(self.raw.last_write_time)
-        } else {
-            None
-        }
+        self.raw.opt_last_write_time()
     }
 
     /// File size in bytes, or `None` unless `FD_FILESIZE` is set.
@@ -641,11 +711,7 @@ impl<'a> FileDescriptor<'a> {
     /// this returns an `Option` rather than a `u64`.
     #[must_use]
     pub const fn file_size(&self) -> Option<u64> {
-        if self.raw.flags.contains(Flags::FILESIZE) {
-            Some(self.raw.file_size)
-        } else {
-            None
-        }
+        self.raw.opt_file_size()
     }
 
     /// `FD_PROGRESSUI`: the source wants a progress indicator shown.
@@ -674,14 +740,11 @@ impl<'a> FileDescriptor<'a> {
     /// relative names refer to.
     #[must_use]
     pub const fn is_directory(&self) -> bool {
-        match self.file_attributes() {
-            Some(a) => a & file_attribute::DIRECTORY != 0,
-            None => false,
-        }
+        self.raw.is_directory()
     }
 }
 
-fn filetime(r: &mut Reader<'_>) -> Result<u64> {
+pub(crate) fn filetime(r: &mut Reader<'_>) -> Result<u64> {
     // FILETIME is { DWORD dwLowDateTime; DWORD dwHighDateTime; } — low first.
     // Reading it as a little-endian u64 gives the same answer, but spelling out
     // the two halves is what makes it obvious that this is not an 8-byte
@@ -971,7 +1034,7 @@ impl Builder {
 }
 
 #[cfg(feature = "alloc")]
-fn write_filetime(out: &mut Vec<u8>, ticks: u64) {
+pub(crate) fn write_filetime(out: &mut Vec<u8>, ticks: u64) {
     // FILETIME is { DWORD dwLowDateTime; DWORD dwHighDateTime; }. Low DWORD
     // first, each little-endian, is byte-for-byte a little-endian u64 — unlike
     // nFileSizeHigh/nFileSizeLow, which are declared the other way round.

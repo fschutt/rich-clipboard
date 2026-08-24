@@ -1,0 +1,7 @@
+{
+  "format": "ITEMIDLIST",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "One class 0x71 control panel item, the Display applet",
+  "notes": "30 bytes on the wire: class, one unknown byte, ten zero bytes and a GUID. The GUID is the whole item -- there is no name on it -- so the display name comes from the control panel identifier table, which is a different table from the shell folder one."
+}

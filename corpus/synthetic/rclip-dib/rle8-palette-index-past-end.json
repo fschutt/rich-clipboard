@@ -1,0 +1,8 @@
+{
+  "format": "CF_DIB",
+  "origin": "synthetic",
+  "description": "2x1 BI_RLE8 run naming palette entry 7 of a two-entry palette",
+  "expect": "error",
+  "error_kind": "Malformed",
+  "notes": "biClrUsed is 2, so the palette is eight bytes. GDI would read whatever followed it; this is the same out-of-range index check the packed 1/4/8-bpp paths use."
+}

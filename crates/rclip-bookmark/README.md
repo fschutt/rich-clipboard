@@ -111,15 +111,41 @@ element of every array and dictionary. Three guards:
 Field access is lazy, so none of the above costs anything until a caller asks
 for a value. `Bookmark::validate` is the opt-in full walk.
 
+## `CFNumberType`
+
+A `0x03xx` number record's low byte is a `CFNumberType`, and the whole
+enumeration from CoreFoundation's `CFNumber.h` is decoded:
+
+| Subtype | | Width |
+|---|---|---|
+| 1–6 | `SInt8` … `Float64` | fixed by the constant |
+| 7–9, 11–13 | `char`, `short`, `int`, `long long`, `float`, `double` | fixed by C |
+| 10, 14, 15, 16 | `long`, `CFIndex`, `NSInteger`, `CGFloat` | **4 or 8, per the writer** |
+
+The last row is the interesting one. Those four name a C or platform type whose
+width follows the data model of the process that wrote the record — four bytes
+from a 32-bit process, eight from a 64-bit one — so the subtype alone does not
+say how many bytes to read. The **record's own length field** does, and it is
+authoritative: the same encoder wrote it, in the same process, from `sizeof` the
+value. So those four dispatch on the payload length.
+
+Getting that wrong is not an error, it is a wrong number: assuming eight bytes
+for a four-byte `long` reads the next record's length word as the value's high
+half. Above `kCFNumberMaxType` (16) there is no `CFNumberType`, and the record
+comes back as `Value::Unknown` with its payload intact rather than guessed at.
+
+Nothing captured exercises 7–16, because CoreFoundation normalises to 1–6 when
+it encodes a bookmark. `corpus/synthetic/rclip-bookmark/cfnumber-subtypes.bin`
+covers all of them, with 10, 14, 15 and 16 present at both widths.
+
 ## What is not implemented
 
 - **No serializer.** `PLAN.md` scopes writers to the formats where round-tripping
   is load-bearing (`shell-link`, `cf-html`, `dropfiles`); a bookmark is only ever
-  read. `// TODO(phase-4):` in the crate if writing one is ever wanted.
-- **`CFNumberType` subtypes 7–16** (`char`, `short`, `int`, `long`, `CFIndex`,
-  `CGFloat`, …) decode to `Value::Unknown` with the payload intact.
-  CoreFoundation normalises to the fixed-width types 1–6 when encoding, so
-  nothing in the corpus uses them. `// TODO(phase-4):` in `src/lib.rs`.
+  read. Phase 4 left it that way on purpose: a bookmark's whole value is that
+  macOS can *resolve* it, and a writer would have to invent a CNID and a volume
+  UUID that no filesystem agreed to — a blob that looks like a bookmark and
+  resolves to nothing.
 - **The legacy `alias` record** (the pre-10.6 `AliasHandle` structure, not the
   `alis`-signed bookmark) is a different format and is not handled. Key `0xFE00`
   carries one as opaque bytes when present.
@@ -142,6 +168,7 @@ for a value. `Bookmark::validate` is the opt-in full walk.
 | `path-components.bin` | ok | `0x1004` array of path components |
 | `date-alis.bin` | ok | `alis` magic; big-endian `0x0400` dates; `0x1010` flags |
 | `named-key-nested.bin` | ok | Bit-31 string key; shared subtrees are not cycles |
+| `cfnumber-subtypes.bin` | ok | Every `CFNumberType`, with 10/14/15/16 at both widths |
 | `cyclic-array.bin` | error | Self-referential element offset → `DepthLimit` |
 | `fanout-bomb.bin` | error | 8^8 nodes from 416 bytes → `TooLarge` |
 | `toc-self-loop.bin` | error | `next` points at the same TOC → `Malformed` |
@@ -150,5 +177,7 @@ for a value. `Bookmark::validate` is the opt-in full walk.
 | `bad-magic.bin` | error | → `BadMagic` |
 | `truncated-header.bin` | error | → `UnexpectedEof` |
 
-The four `ok` synthetic fixtures are cross-checked against `mac_alias` 2.2.3,
-which decodes all of them to the values the sidecars claim.
+Four of the `ok` synthetic fixtures are cross-checked against `mac_alias` 2.2.3,
+which decodes all of them to the values the sidecars claim. `cfnumber-subtypes`
+is not among them: `mac_alias` stops at `CFNumberType` 6 as well, so it is the
+thing being tested rather than an oracle for it.

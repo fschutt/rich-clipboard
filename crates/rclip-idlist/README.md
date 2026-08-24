@@ -107,21 +107,76 @@ off, the crate links no tables at all. `file-entry-ansi-cp1252.bin` is the
 fixture: the same name reads `Grüße.txt` under Windows-1252 and `GrьЯe.txt` under
 Windows-1251, which is why the code page is a parameter and never a guess.
 
+## Signature-based items (`src/signature.rs`)
+
+**Done** — was `// TODO(phase-3)`. Several namespace extensions write a class
+type indicator of `0x00`, which means nothing, and identify themselves with a
+32-bit signature a few bytes into the body instead. `ShellItem::parse` therefore
+runs `signature::recognise` *before* the class byte, in libfwsi's order:
+
+| Item | How it is recognised |
+|---|---|
+| `ShellItem::DelegateFolder` | class identifier `{5E591A74-…}` 32 bytes before the end of the item |
+| `ShellItem::MtpVolume` | `0x10312005` at `abID[4..8]` |
+| `ShellItem::MtpFileEntry` | `0x07192006` at `abID[4..8]` |
+| `ShellItem::UsersPropertyView` | one of six signatures at `abID[4..8]` |
+| `ShellItem::CompressedFolder` | the punctuation of its formatted timestamp |
+
+Two things about that order are worth knowing. It is not free: the probes read
+fixed offsets on items of *every* class, so an item whose `FileSize` or FAT
+timestamp happened to spell a signature would be reclassified — libfwsi has the
+same property, the values make it a curiosity rather than a risk, and the cost
+of a wrong guess is one breadcrumb segment. And the delegate folder is *not*
+recursive: `DelegateFolder::inner_item` goes through `parse_no_delegate`, so a
+PIDL that nests wrappers a thousand deep cannot turn into a thousand stack
+frames.
+
+Three units differ between neighbouring layouts and each one is a silent
+corruption if read wrong, so they are called out at the field: the MTP string
+lengths count UTF-16 **characters including** the terminator, the compressed
+folder's count characters **excluding** it, and the FTP block's count **bytes**.
+
+`UsersPropertyView::property_store` is handed back as raw bytes. It is an
+MS-PROPSTORE serialized property storage — byte-identical in structure to a
+`.lnk` `PropertyStoreDataBlock` payload, which `rclip-shell-link` decodes — but
+codec crates in this workspace do not depend on each other and a PIDL parser has
+no business linking a shell link parser.
+
+## Control panel items, pre-XP file entries, FTP URIs
+
+All three were `// TODO(phase-3)` and all three are done.
+
+- **Class `0x71`** is a GUID and nothing else, so `Guid::control_panel_name`
+  carries libfwsi's 76-entry identifier table. It is deliberately a *separate*
+  table from `well_known_name`: the two namespaces overlap and disagree —
+  `{BD84B380-…}` is `Fonts` as a shell folder and `Font Folder` as a control
+  panel item — so looking one up in the other is not merely incomplete, it is
+  wrong.
+- **Pre-XP file entries** carry the 8.3 name where a newer shell writes an
+  extension block. Nothing in the item says which layout it is; libfwsi decides
+  by looking at the `u16` after the primary name and asking whether it could be
+  an extension block size, and `FileEntry::is_pre_xp` reproduces that
+  look-ahead, alignment padding and the `0xB1` SolidWorks exclusion included.
+- **The URI item's `>= 36` byte FTP block** decodes into `FtpData`. It contains
+  a **cleartext password**, so `FtpData`'s `Debug` prints `<redacted>` for it.
+  That is a courtesy against accidental logging and not a boundary: the field is
+  public and the bytes are still in `Uri::data`.
+
 ## Not implemented yet
 
-- `// TODO(phase-3)` Signature-based item recognition — MTP devices, control
-  panel categories, users-property-view items, delegate folders, and the
-  compressed-folder heuristics. libfwsi probes a set of 32-bit signatures at
-  fixed offsets *before* falling back to the class byte; these all land in
-  `ShellItem::Unknown` here.
-- `// TODO(phase-3)` Control panel items (class `0x71`) are not decoded.
-- `// TODO(phase-3)` Pre-XP file entries carry a *secondary* (8.3) name after the
-  primary one instead of an extension block. Not read.
-- `// TODO(phase-3)` The URI item's FTP data block (`>= 36` bytes: a `FILETIME`
-  and three length-prefixed strings, one of which is a cleartext password) is
-  kept as opaque bytes.
-- `// TODO(phase-3)` Extension blocks other than `0xBEEF0004` are located,
+- `// TODO(phase-4)` Extension blocks other than `0xBEEF0004` are located,
   bounded and handed back with their signature and body, but not decoded.
+- Signature-based items libfwsi knows and this crate does not: Acronis TIB
+  files, CDBurn, Game Folder, Web Sites, control panel *categories* and control
+  panel CPL files. Each is a fixed signature away, and each was left out for the
+  same reason: none of them carries a display name that a breadcrumb wants, so
+  the whole benefit would be a better `Debug` line. They stay `Unknown` with
+  their bytes intact.
+- The delegate folder's inner data is handed back as the wrapped item's `abID`.
+  libfwsi additionally re-aligns it by four bytes for four specific folder
+  identifiers and not at all for the search folder; `inner_item()` does not,
+  because the re-alignment is a per-extension quirk and the raw `inner` slice is
+  right there for a caller that knows which extension it is looking at.
 - The `alloc` builder only synthesises root folder items. Forging a *file entry*
   PIDL is not a layout problem: the shell binds a PIDL by handing the bytes back
   to the namespace extension that owns them, so a hand-built one resolves to
@@ -136,3 +191,12 @@ in the `0xBEEF0004` layout. The malformed ones (`cb-one-bomb`,
 `item-runs-past-end`, `odd-trailing-byte`, `cida-child-offset-past-end`,
 `cida-count-too-large`) each assert a specific `ErrorKind`; `cb-zero-bomb` asserts
 a clean stop, since hanging is the failure mode it guards.
+
+The Phase-3 additions are one fixture per newly recognised item —
+`control-panel-item`, `mtp-volume`, `mtp-file-entry`, `users-property-view`,
+`compressed-folder-win10`, `delegate-folder`, `uri-ftp`, `file-entry-pre-xp` —
+plus `mtp-volume-length-bomb`, which declares `0xFFFFFFFF` characters of name in
+a sixty-byte item. That one is the fixture that matters: it expects `ok`,
+because item parsing in this crate never fails, and it asserts that the string
+comes back absent rather than truncated and that the characters-to-bytes
+multiply does not overflow on a 32-bit target.

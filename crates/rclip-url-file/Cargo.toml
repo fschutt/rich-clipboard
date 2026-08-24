@@ -14,6 +14,12 @@ default = []
 ## that must copy.
 alloc = ["rclip-core/alloc"]
 std = ["alloc", "rclip-core/std"]
+## Decoding the `IDList=` key into shell items. Implies `alloc`: the value is
+## `WritePrivateProfileStruct` hex, so the decoded PIDL is not a slice of the
+## file and cannot be borrowed from it. Off by default -- a `.url` on disk
+## almost always carries an empty `IDList=`, and a crate that only wants `URL=`
+## should not link a PIDL parser.
+idlist = ["alloc", "dep:rclip-idlist", "rclip-idlist/alloc"]
 ## Transcoding a legacy `.url` out of a Windows code page, for the
 ## `[InternetShortcut.A]` section. Implies `alloc`: transcoding cannot borrow,
 ## the decoded text is not a contiguous slice of the input anywhere.
@@ -22,3 +28,4 @@ codepage = ["alloc", "dep:rclip-codepage", "rclip-codepage/alloc"]
 [dependencies]
 rclip-core = { workspace = true }
 rclip-codepage = { workspace = true, optional = true }
+rclip-idlist = { workspace = true, optional = true }

@@ -1,6 +1,6 @@
 [package]
 name        = "rclip-file-desc"
-description = "CFSTR_FILEDESCRIPTORW parser and serializer: Win32 virtual / promised file descriptors"
+description = "CFSTR_FILEDESCRIPTORW / CFSTR_FILEDESCRIPTORA parser and serializer: Win32 virtual / promised file descriptors"
 version.workspace      = true
 edition.workspace      = true
 rust-version.workspace = true
@@ -10,12 +10,20 @@ authors.workspace      = true
 
 [features]
 default = []
-## Enables the serializer, which must own its output.
-alloc = ["rclip-core/alloc"]
-std = ["alloc", "rclip-core/std"]
+## Enables the serializers, which must own their output.
+## `rclip-codepage?/alloc` is the weak-dependency form: it turns on that
+## crate's owning helpers only when the `codepage` feature actually pulled it
+## in, so `alloc` alone still links no tables.
+alloc = ["rclip-core/alloc", "rclip-codepage?/alloc"]
+std = ["alloc", "rclip-core/std", "rclip-codepage?/std"]
+## Decoding and encoding `FILEGROUPDESCRIPTORA`'s `CHAR cFileName[260]` through
+## a named legacy code page. Off by default: every modern producer registers
+## "FileGroupDescriptorW" and the wide form needs no tables.
+codepage = ["dep:rclip-codepage"]
 
 [dependencies]
 rclip-core = { workspace = true }
+rclip-codepage = { workspace = true, optional = true }
 
 [dev-dependencies]
 rclip-file-desc = { path = ".", features = ["std"] }

@@ -33,13 +33,62 @@ pub mod ty {
 }
 
 /// `CFNumberType` values, used as the subtype of a [`ty::NUMBER`] record.
+///
+/// The full enumeration, from CoreFoundation's `CFNumber.h`. It comes in three
+/// groups and the groups matter, because only the first has a width that the
+/// constant itself fixes:
+///
+/// - **1–6, fixed width.** `SInt8` … `Float64`. What CoreFoundation normalises
+///   to when it encodes, so these are the only ones a bookmark from a real
+///   machine has ever been seen to use.
+/// - **7–13, the C types.** `char`, `short`, `int`, `long`, `long long`,
+///   `float`, `double`. Their width is whatever C says on the machine that
+///   wrote them, which for `long` is 4 bytes on a 32-bit process and 8 on a
+///   64-bit one.
+/// - **14–16, the platform types.** `CFIndex`, `NSInteger` and `CGFloat`, all
+///   of which are 8 bytes on a 64-bit process and 4 on a 32-bit one.
+///
+/// So the width of a 10, 14, 15 or 16 is a property of the *record*, not of the
+/// subtype. The record's length field is what says which, and that is what the
+/// decoder uses.
 pub mod number {
+    /// `kCFNumberSInt8Type`.
     pub const SINT8: u32 = 1;
+    /// `kCFNumberSInt16Type`.
     pub const SINT16: u32 = 2;
+    /// `kCFNumberSInt32Type`.
     pub const SINT32: u32 = 3;
+    /// `kCFNumberSInt64Type`.
     pub const SINT64: u32 = 4;
+    /// `kCFNumberFloat32Type`.
     pub const FLOAT32: u32 = 5;
+    /// `kCFNumberFloat64Type`, a 64-bit IEEE 754 double.
     pub const FLOAT64: u32 = 6;
+    /// `kCFNumberCharType` — C `char`, one byte.
+    pub const CHAR: u32 = 7;
+    /// `kCFNumberShortType` — C `short`, two bytes.
+    pub const SHORT: u32 = 8;
+    /// `kCFNumberIntType` — C `int`, four bytes.
+    pub const INT: u32 = 9;
+    /// `kCFNumberLongType` — C `long`: **four bytes or eight**, depending on
+    /// the data model of the process that wrote the record.
+    pub const LONG: u32 = 10;
+    /// `kCFNumberLongLongType` — C `long long`, eight bytes.
+    pub const LONG_LONG: u32 = 11;
+    /// `kCFNumberFloatType` — C `float`, four bytes.
+    pub const FLOAT: u32 = 12;
+    /// `kCFNumberDoubleType` — C `double`, eight bytes.
+    pub const DOUBLE: u32 = 13;
+    /// `kCFNumberCFIndexType` — a signed word: eight bytes on a 64-bit
+    /// process, four on a 32-bit one.
+    pub const CF_INDEX: u32 = 14;
+    /// `kCFNumberNSIntegerType` — the same width rule as [`CF_INDEX`].
+    pub const NS_INTEGER: u32 = 15;
+    /// `kCFNumberCGFloatType` — a `double` on a 64-bit process and a `float`
+    /// on a 32-bit one.
+    pub const CG_FLOAT: u32 = 16;
+    /// `kCFNumberMaxType`. A subtype above this is not a `CFNumberType` at all.
+    pub const MAX: u32 = 16;
 }
 
 /// Subtypes of a [`ty::URL`] record.

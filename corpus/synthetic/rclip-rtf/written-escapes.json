@@ -1,0 +1,7 @@
+{
+  "format": "RTF 1.9.1",
+  "origin": "synthetic",
+  "description": "Writer output exercising every escape it can emit: \\uN with a one-character ASCII fallback, a surrogate pair, \\tab, \\par, and the three metacharacters",
+  "expect": "ok",
+  "notes": "Every byte is ASCII by construction - the writer never emits a raw high byte, because a reader under a different \\ansicpg would decode one as a different character rather than as a visible gap. The em dash falls back to '-' and the emoji to '??', one fallback character per \\uN as \\uc1 in the header promises. Decodes to 'caf\\u00e9 \\u2014 \\U0001f600\\ttab\\nbreak {braces} \\\\slash'."
+}

@@ -1,0 +1,7 @@
+{
+  "format": "CF_DIBV5",
+  "origin": "synthetic",
+  "description": "2x1 BITMAPV5HEADER with LCS_CALIBRATED_RGB, sRGB primaries in the endpoints and gamma 2.2",
+  "expect": "ok",
+  "notes": "Endpoints are FXPT2DOT30 (raw / 2^30) and gamma is unsigned 16.16 (raw / 65536), so 2.2 arrives as 0x00023333. Both are reported and neither is applied: the pixels come out in whatever space they went in, because a half-applied colour transform is undetectable downstream and undoable by nobody."
+}

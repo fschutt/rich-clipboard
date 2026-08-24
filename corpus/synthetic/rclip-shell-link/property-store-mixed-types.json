@@ -1,0 +1,9 @@
+{
+  "format": "MS-SHLLINK",
+  "origin": "synthetic",
+  "expect": "ok",
+  "description": "Three property storages: integer-named, mixed VT_*, and one string-named",
+  "notes": "Covers VT_I4, VT_UI4, VT_FILETIME, VT_CLSID, VT_BOOL, VT_EMPTY, VT_NULL, VT_BSTR and VT_LPWSTR, plus a VT_VECTOR|VT_LPWSTR the codec deliberately does not decode. The third storage's format ID is {D5CDD505-2E9C-101B-9397-08002B2CF9AE}, which is what makes its values string-named.",
+  "leak_allow": "Uuid",
+  "leak_allow_reason": "The UUID in the notes is the format ID MS-PROPSTORE 2.2 defines as the string-named one. It is a constant in the specification, not a machine identifier."
+}

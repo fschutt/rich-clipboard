@@ -1,0 +1,7 @@
+{
+  "format": "CF_HTML",
+  "origin": "synthetic",
+  "description": "Two StartFragment/EndFragment pairs, no marker comments, naming different substrings",
+  "expect": "ok",
+  "notes": "The spec floats multiple pairs as a future extension for non-contiguous selections and nothing has ever emitted one, so a repeat today is a producer bug or a way to make a lenient reader and a strict reader disagree about which bytes the user copied. The first pair wins \u2014 the reading that cannot be changed by appending to the header \u2014 and Header::duplicate_keys records that a value was dropped. There are no marker comments, so the offsets are the only evidence and FragmentSource is OffsetsOnly."
+}

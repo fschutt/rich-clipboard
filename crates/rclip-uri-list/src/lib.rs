@@ -16,9 +16,18 @@
 //! # Borrowing and `alloc`
 //!
 //! Parsing borrows. Percent-*validating* a URI and iterating its decoded bytes
-//! work with no allocator; producing the decoded string does not, so
-//! [`Uri::to_decoded_bytes`] and the serializers in [`emit`] are behind the
-//! `alloc` feature.
+//! work with no allocator, and so does percent-*encoding* — [`percent_encode`]
+//! is an iterator of ASCII bytes that also implements `Display`. Producing an
+//! owned string does need an allocator, so [`Uri::to_decoded_bytes`] and the
+//! serializers in [`emit`] are behind the `alloc` feature.
+//!
+//! # Which direction escapes
+//!
+//! A URI on its way *out* of this crate is written verbatim: it is already a
+//! URI, and re-encoding one doubles every `%` it contains. A *path* on its way
+//! in is a different question with an actual answer, and [`emit::file_uri`] is
+//! it. See [`EncodeSet`] for why the reserved set is neither larger nor smaller
+//! than RFC 3986's `pchar`.
 //!
 //! # Example
 //!
@@ -39,7 +48,6 @@
 pub mod convention;
 pub mod emit;
 mod lines;
-pub mod shortcut;
 pub mod uri;
 
 use rclip_core::{Error, ErrorKind, Reader, Result};
@@ -47,8 +55,19 @@ use rclip_core::{Error, ErrorKind, Reader, Result};
 use lines::Lines;
 
 pub use convention::FileAction;
-pub use shortcut::ShortcutTarget;
-pub use uri::{FileUri, PercentDecode, Uri};
+/// Where a shortcut points, shared with every other member of the shortcut
+/// family.
+///
+/// Re-exported from [`rclip_core::shortcut`], which is where the canonical
+/// definition lives. Four crates used to carry a byte-identical copy of it, so
+/// a consumer holding two of them held two incompatible types for one concept;
+/// the module is re-exported whole so that `crate::shortcut::scheme` and
+/// `crate::shortcut::looks_like_path` still resolve here too.
+pub use rclip_core::shortcut;
+pub use rclip_core::ShortcutTarget;
+#[cfg(feature = "alloc")]
+pub use uri::percent_encode_to_string;
+pub use uri::{percent_encode, EncodeSet, FileUri, PercentDecode, PercentEncode, Uri};
 
 /// A parsed `text/uri-list`.
 ///
