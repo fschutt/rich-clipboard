@@ -452,12 +452,38 @@ Budget real time for it; use AppKit as the oracle.
 **Phase 4 — the shortcut family.** `url-file`, `webloc`, `bookmark`, `desktop-entry` behind a
 shared `ShortcutTarget`. This is the "drag a link into the OS and get structural data back" goal.
 
-**Phase 5 — facade + azul wiring.** `rich-clipboard` umbrella crate, feature-gated per format.
-Wire flavor negotiation into the four platform backends. Extend azul's `ClipboardContent` to
-carry images and file lists alongside styled runs.
+**Phase 5 — the facade.** `rich-clipboard` umbrella crate, feature-gated per format, with the
+write-side fan-out table and the `RichText` hub.
+
+**Phase 6 — size enforcement.** The vocabulary (`Limits`, `SizeHint`, `Oversize`, `Budget`) lands
+early with the rest of `rclip-core`, because every layer has to agree on it. The *enforcement* is
+this phase, and it has three parts:
+
+1. **Codec-side.** Thread `max_items` through the list-shaped iterators — `idlist`, `dropfiles`,
+   `uri-list`, `file-desc`, `rtf`'s runs. This is the §4b gap: 64 million individually-valid
+   minimum-size items are each perfectly legal, so no per-field check can reject them.
+2. **Facade-side.** `rich-clipboard` applies `Limits` during `decode_payload` and calls
+   `OversizePolicy::on_oversize` before committing to a flavor.
+3. **Transport-side.** Each backend produces a real `SizeHint` — `GlobalSize`, `NSData::length`,
+   the `INCR` floor — and carries a `Budget` on the Wayland pipe, which is the one platform where
+   counting while reading is the only defence available.
+
+**Why it is a phase of its own, here.** It could not have come earlier: `Limits` written before
+the codecs existed would have been guesswork, and the 67-million-item measurement needed the
+codecs to measure. Had each codec invented its own cap during Phase 0, there would now be twelve
+conventions to reconcile.
+
+It also must not come later. Part 3 is structural to how a backend *reads* — the `INCR` floor
+arrives before the transfer starts and the Wayland budget is checked between `read()` calls, so
+neither is a wrapper that can be added afterwards. Wiring azul first and bolting size on second
+means writing all four backends twice.
+
+**Phase 7 — azul wiring.** Flavor negotiation into the four platform backends; extend azul's
+`ClipboardContent` to carry images and file lists alongside styled runs.
 
 Phases 1–4 are independent of each other once Phase 0 lands, so they can be reordered or run in
-parallel by priority.
+parallel by priority. Phases 5–7 are strictly ordered: the facade is what applies the policy, and
+the policy has to exist before the transport that feeds it is written.
 
 ## 8. Open decisions
 
