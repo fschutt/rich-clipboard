@@ -7,6 +7,17 @@
 #
 # Exits non-zero if any target crashes, hangs or leaks; libFuzzer writes the
 # offending input to fuzz/artifacts/<target>/ either way.
+#
+# macOS note: `libfuzzer-sys` compiles a C++ runtime, and on a machine whose
+# Command Line Tools are a partial install the libc++ headers are not on the
+# default search path, so the build fails before any target runs. If you see
+# that, point the compiler at the SDK's copy:
+#
+#   export CXXFLAGS="-isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1"
+#
+# Not exported here: it is a property of one machine's toolchain, not of this
+# repository, and setting it unconditionally would hide a real breakage on a
+# machine where the headers are where they belong.
 set -uo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -569,3 +569,38 @@ fn the_written_fixtures_match_the_writer() {
         "the writer's escaping changed; regenerate corpus/synthetic/rclip-rtf/written-escapes.bin"
     );
 }
+
+#[test]
+fn a_space_fallback_is_not_eaten_as_the_parameter_delimiter() {
+    // Found by the `rtf_write_round_trip` fuzz target.
+    //
+    // U+00A0's ASCII fallback is a space. Written naively that yields
+    // `\u160 `, where the tokenizer consumes the space as the control word's
+    // *parameter delimiter* — so the fallback never reaches the `\ucN` counter,
+    // which then skips whatever comes next instead. With U+2013 following, the
+    // thing skipped is the entire en dash.
+    //
+    // This is the `\ucN` failure the crate exists to get right, appearing in
+    // its own writer.
+    let text = "a\u{00A0}\u{2013}b";
+    let rtf = write([(text, WriteProps::default())]);
+    let back = Document::parse(&rtf).expect("re-parses");
+    assert_eq!(
+        back.text, text,
+        "the en dash after a space-fallback escape must survive"
+    );
+}
+
+#[test]
+fn every_ascii_fallback_round_trips_after_a_non_bmp_neighbour() {
+    // The general form of the bug above: any fallback that is itself a
+    // delimiter-looking byte has to be written where the counter can see it.
+    for c in [
+        '\u{00A0}', '\u{2013}', '\u{2014}', '\u{2018}', '\u{201C}', '\u{00AD}',
+    ] {
+        let text = format!("x{c}\u{2013}y");
+        let rtf = write([(text.as_str(), WriteProps::default())]);
+        let back = Document::parse(&rtf).expect("re-parses");
+        assert_eq!(back.text, text, "U+{:04X} did not round-trip", c as u32);
+    }
+}

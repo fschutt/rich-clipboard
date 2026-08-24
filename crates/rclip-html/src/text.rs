@@ -85,6 +85,19 @@ impl<'a> HtmlText<'a> {
         if self.ws == Whitespace::Preserve && self.raw.contains(&b'\r') {
             return None;
         }
+        // Preserving mode at a boundary drops one leading newline -- "a newline
+        // immediately after a `<pre>` start tag is ignored", which is why
+        // `<pre>\ncode</pre>` does not render with a blank first line. `chars`
+        // does it through `strip_newline`; the borrowed bytes still have the
+        // newline in them, so they are not the decoded text and this fast path
+        // has to decline. Found by the `html_tokenize` fuzz target, which
+        // decodes every span both ways and compares.
+        if self.ws == Whitespace::Preserve
+            && self.at_boundary
+            && matches!(self.raw.first(), Some(b'\r' | b'\n'))
+        {
+            return None;
+        }
         core::str::from_utf8(self.raw).ok()
     }
 

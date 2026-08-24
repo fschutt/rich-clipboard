@@ -6,6 +6,12 @@
 # enough to catch a shallow bug introduced by the commit under test and short
 # enough to keep the job honest. Finding new deep bugs is a job for a long
 # soak run, not for CI.
+#
+# The target list is sharded across four jobs. That is not for speed on a pull
+# request -- 31 targets at 60s each fits in one job -- it is because the weekly
+# soak runs each target for 900s, and 31 * 900s is over eight hours, which is
+# past GitHub's six-hour ceiling for a single job. Sharding is what makes the
+# soak actually run to completion rather than being cancelled every Monday.
 name: fuzz
 
 on:
@@ -28,10 +34,18 @@ env:
 
 jobs:
   fuzz:
-    name: build and run every target
+    name: "shard ${{ matrix.shard }}/4"
     runs-on: ubuntu-latest
-    # 23 targets; the per-target budget below plus build time has to fit.
-    timeout-minutes: 60
+    # A shard is a quarter of the target list, so the weekly soak's 900s per
+    # target is about two hours here rather than the eight it would be in one
+    # job -- which is over GitHub's six-hour ceiling and so never finished.
+    timeout-minutes: ${{ github.event_name == 'schedule' && 180 || 45 }}
+    strategy:
+      # One broken parser must not hide the state of the others, which is the
+      # same reason the loop below keeps going after a failure.
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v4
 
@@ -57,17 +71,20 @@ jobs:
 
       # Run each target separately rather than through run-all.sh, so that a
       # failure names the target in the GitHub UI and the surviving targets
-      # still run. `fail-fast` is off for the same reason: one broken parser
-      # should not hide the state of the others.
-      - name: run every fuzz target
+      # still run.
+      - name: run this shard's fuzz targets
         working-directory: fuzz
         env:
           SECONDS_PER_TARGET: ${{ github.event.inputs.seconds || (github.event_name == 'schedule' && '900' || '60') }}
+          SHARD: ${{ matrix.shard }}
         run: |
           set -uo pipefail
           targets=$(cargo fuzz list)
           failed=""
+          i=0
           for target in $targets; do
+            if [ "$((i % 4))" -ne "$SHARD" ]; then i=$((i + 1)); continue; fi
+            i=$((i + 1))
             echo "::group::$target"
             # -timeout=10: a clipboard parser that spends ten seconds on one
             # payload is a hang for this repo's purposes, whatever libFuzzer's
@@ -94,7 +111,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: fuzz-artifacts
+          name: fuzz-artifacts-shard-${{ matrix.shard }}
           path: fuzz/artifacts/
           if-no-files-found: ignore
           retention-days: 30

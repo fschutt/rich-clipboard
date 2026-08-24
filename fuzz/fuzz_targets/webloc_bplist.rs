@@ -17,20 +17,39 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
 
-    // Resolve every object the table can name, not just the reachable ones:
-    // an unreachable object is still an offset the parser has to bound.
-    let mut budget = data.len() + 1;
+    // The node budget, which is now the crate's rather than this target's:
+    // `object` takes it by `&mut` so that *siblings share it*, because a
+    // per-path counter resets on every branch and catches nothing. Depth alone
+    // is not enough here and the crate has the measurement to prove it -- 223
+    // bytes of dictionaries nesting only nine levels cost 40 million
+    // resolutions -- so this is the guard that turns a fan-out bomb into an
+    // error, and driving it is most of the point of this target.
+    let start = plist.budget();
+    let mut budget = start;
     let mut stack = vec![(plist.top_object(), 0u32)];
+    let mut visits = 0usize;
     while let Some((index, depth)) = stack.pop() {
-        // A shared subtree can be visited more than once; the budget is what
-        // keeps a fan-out bomb linear. This mirrors the node budget
-        // `rclip_bookmark::Bookmark::validate` uses for the same attack shape.
-        if budget == 0 {
+        visits += 1;
+        // The queue is this target's own structure and the crate's budget says
+        // nothing about it, so it gets its own cap rather than an assertion.
+        if visits > 4 * start + 16 {
             break;
         }
-        budget -= 1;
-
-        let Ok(obj) = plist.object(index, depth) else {
+        if budget == 0 {
+            // Nothing can be resolved on an exhausted budget. Documented as
+            // `ErrorKind::TooLarge`, though an out-of-range index or a
+            // depth-limited hop is checked first and reports itself, so what is
+            // asserted is the part that holds unconditionally.
+            assert!(
+                plist.object(index, depth, &mut budget).is_err(),
+                "an exhausted budget still resolved an object"
+            );
+            break;
+        }
+        let before = budget;
+        let resolved = plist.object(index, depth, &mut budget);
+        assert!(budget <= before, "the node budget grew");
+        let Ok(obj) = resolved else {
             continue;
         };
         match obj {

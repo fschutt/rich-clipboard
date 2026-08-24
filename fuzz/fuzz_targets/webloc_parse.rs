@@ -21,6 +21,25 @@ fuzz_target!(|data: &[u8]| {
     match loc.encoding() {
         Encoding::Binary => assert!(data.starts_with(b"bplist00")),
         Encoding::Xml => {}
+        // Added after this target was written: the pre-OS X form, a Macintosh
+        // resource fork with a `url ` resource. It is sniffed *structurally*
+        // rather than by a signature -- there is no magic to match, so
+        // `detect` checks that the header's four offsets and the map's own two
+        // agree with the buffer -- which makes it the only encoding here a
+        // mutator can reach by arithmetic rather than by reproducing a string.
+        // `webloc_rsrc` drives the fork reader directly.
+        Encoding::ResourceFork => {
+            assert!(
+                !data.starts_with(b"bplist00"),
+                "a binary plist was sniffed as a resource fork"
+            );
+            // The legacy form carries no title: Finder puts the name in the
+            // filename and writes no `urln` resource.
+            assert!(
+                loc.url_name().is_none(),
+                "a resource fork produced a URLName it cannot carry"
+            );
+        }
     }
 
     // `URL` is documented as always present -- parse fails without it.

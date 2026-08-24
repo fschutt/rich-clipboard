@@ -74,6 +74,94 @@ fuzz_target!(|data: &[u8]| {
         let _ = s.as_ascii();
     }
 
+    // MS-PROPSTORE, hanging off the ExtraData chain and new since the last
+    // sweep. It is a third independently attacker-controlled walk: a chain of
+    // storages, each a chain of typed values, each value's payload bounded by a
+    // `ValueSize` off the wire and its meaning chosen by a `VT_*` word off the
+    // wire. `PropertyValue::decode` is where a length field turns into a slice,
+    // and `VT_LPWSTR` multiplies its count by two before doing it.
+    if let Some(store) = link.property_store() {
+        let store_len = store.as_bytes().len();
+        assert!(store_len <= data.len(), "the store outran the link");
+
+        let mut storages = 0usize;
+        // `while let` rather than `for`, so `is_terminated` can be asked
+        // *after* the walk -- asked before it, it always says no, because it
+        // reports what the walk found rather than what the buffer holds.
+        let mut walk = store.storages();
+        #[allow(clippy::while_let_on_iterator)]
+        while let Some(storage) = walk.next() {
+            let Ok(storage) = storage else { break };
+            storages += 1;
+            // Every storage counts its own `StorageSize`, so a store cannot
+            // hold more of them than it has bytes for the smallest one.
+            assert!(storages <= store_len, "more storages than the store has bytes");
+            assert!(
+                storage.offset <= store_len,
+                "a storage started past the end of the store"
+            );
+            assert!(
+                storage.value_bytes().len() <= store_len,
+                "a storage's values outran the store"
+            );
+
+            let mut values = 0usize;
+            for property in storage.values() {
+                let Ok(property) = property else { break };
+                values += 1;
+                assert!(values <= store_len, "more properties than the store has bytes");
+                assert!(property.offset <= store_len, "a property started past the store");
+                // A string-named storage names by string and an
+                // integer-named one by integer; the two forms have different
+                // record layouts, so reading one as the other desynchronises
+                // the walk.
+                match property.name {
+                    rclip_shell_link::propstore::PropertyName::String(s) => {
+                        assert!(storage.is_string_named(), "a string name in an integer storage");
+                        let _ = s.to_string_lossy();
+                    }
+                    rclip_shell_link::propstore::PropertyName::Integer(_) => {
+                        assert!(!storage.is_string_named(), "an integer name in a string storage");
+                    }
+                }
+                match property.value {
+                    rclip_shell_link::propstore::PropertyValue::Lpwstr(s)
+                    | rclip_shell_link::propstore::PropertyValue::Bstr(s) => {
+                        let _ = s.to_string_lossy();
+                        let _ = s.as_ascii();
+                    }
+                    rclip_shell_link::propstore::PropertyValue::Unsupported {
+                        property_type,
+                        data: payload,
+                    } => {
+                        assert!(
+                            payload.len() <= store_len,
+                            "an undecoded value outran the store"
+                        );
+                        let _ = property_type;
+                    }
+                    other => {
+                        let _ = other;
+                    }
+                }
+            }
+            let _ = storage.get(0);
+            let _ = storage.get_named(&[]);
+            let _ = (storage.size, storage.version);
+        }
+
+        // MS-PROPSTORE requires a terminating storage whose `StorageSize` is
+        // zero, but a store sliced out by a block size frequently carries no
+        // terminator of its own, so running out of buffer on a record boundary
+        // is also a clean end. This is what tells the two apart.
+        let _ = walk.is_terminated();
+
+        // The convenience readers on top of the walk. `app_user_model_id` is
+        // an identity claim a shortcut makes about *another* application, so
+        // it is the one field here a consumer is most likely to act on.
+        let _ = store.app_user_model_id().map(|s| s.to_string_lossy());
+    }
+
     // The ExtraData chain is a second length-prefixed walk, independent of
     // everything above it.
     let mut blocks = 0usize;

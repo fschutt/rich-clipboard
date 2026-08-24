@@ -17,6 +17,16 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 
+# Structure-aware input for the three targets whose entry point does not take
+# bytes. `rich_clipboard::decode_payload` takes a `Platform` plus a list of
+# `(native identifier, bytes, item index)`, and `rclip_rtf::Writer` takes
+# styled runs; a `&[u8]` target would have to invent that structure, and every
+# obvious invention narrows what the mutator can reach. Hand-written `Arbitrary`
+# impls rather than the derive, because the interesting part is the *weighting*
+# -- mostly real clipboard identifiers, some arbitrary strings -- which a derive
+# cannot express and which is what gets the real decoders reached at all.
+arbitrary = "1"
+
 # Every codec is pulled in with `std`, which transitively turns on `alloc`.
 # The point of a fuzz target is to reach as much code as possible, and the
 # owning halves of these crates -- the serializers, the lossy decoders -- are
@@ -32,9 +42,17 @@ rclip-file-desc     = { path = "../crates/rclip-file-desc",     features = ["std
 rclip-idlist        = { path = "../crates/rclip-idlist",        features = ["std"] }
 rclip-rtf           = { path = "../crates/rclip-rtf",           features = ["std"] }
 rclip-shell-link    = { path = "../crates/rclip-shell-link",    features = ["std"] }
+rclip-html          = { path = "../crates/rclip-html",          features = ["std"] }
 rclip-uri-list      = { path = "../crates/rclip-uri-list",      features = ["std"] }
 rclip-url-file      = { path = "../crates/rclip-url-file",      features = ["std"] }
 rclip-webloc        = { path = "../crates/rclip-webloc",        features = ["std"] }
+
+# The facade, with every codec compiled in. `full` is the crate's own name for
+# "every format", and with `std` on top it is what `--all-features` resolves to.
+# A build with formats missing would send `decode` down the `FeatureDisabled`
+# arm instead of into the codec, which is the opposite of what a fuzz target
+# wants.
+rich-clipboard = { path = "../crates/rich-clipboard", features = ["std", "full"] }
 
 [profile.release]
 debug = 1
@@ -203,6 +221,62 @@ bench = false
 [[bin]]
 name = "bookmark_parse"
 path = "fuzz_targets/bookmark_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "html_tokenize"
+path = "fuzz_targets/html_tokenize.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "html_runs"
+path = "fuzz_targets/html_runs.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "html_document"
+path = "fuzz_targets/html_document.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "html_entity"
+path = "fuzz_targets/html_entity.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "html_css"
+path = "fuzz_targets/html_css.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rtf_write_round_trip"
+path = "fuzz_targets/rtf_write_round_trip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "facade_decode"
+path = "fuzz_targets/facade_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "webloc_rsrc"
+path = "fuzz_targets/webloc_rsrc.rs"
 test = false
 doc = false
 bench = false

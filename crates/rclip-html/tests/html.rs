@@ -729,3 +729,64 @@ fn the_element_tables_agree_with_themselves() {
     assert!(element::formatting("STRONG").is_some());
     assert!(element::formatting("div").is_none());
 }
+
+#[test]
+fn as_str_declines_when_pre_drops_its_leading_newline() {
+    // Found by the `html_tokenize` fuzz target, which decodes every span both
+    // ways and compares.
+    //
+    // HTML says a newline immediately after a `<pre>` start tag is ignored,
+    // which is why `<pre>\ncode</pre>` renders without a blank first line.
+    // `chars` implements that; the borrowed bytes still have the newline in
+    // them, so they are *not* the decoded text and the fast path has to
+    // decline rather than hand back a different answer.
+    let t = HtmlText::new(b"\ncode", Whitespace::Preserve, true);
+    assert_eq!(t.chars().collect::<String>(), "code");
+    assert_eq!(
+        t.as_str(),
+        None,
+        "the raw bytes still carry the newline that `chars` drops"
+    );
+
+    // Not at a boundary, the newline is content and the fast path is correct.
+    let mid = HtmlText::new(b"\ncode", Whitespace::Preserve, false);
+    assert_eq!(mid.as_str(), Some("\ncode"));
+    assert_eq!(mid.chars().collect::<String>(), "\ncode");
+}
+
+#[test]
+fn as_str_and_chars_never_disagree() {
+    // The general property, and the one the fuzz target actually asserts: the
+    // fast path is an optimisation, so whenever it answers it must give exactly
+    // what the slow path would. A disagreement is worse than a slow path —
+    // two APIs on one type returning different text for the same input.
+    let raws: &[&[u8]] = &[
+        b"",
+        b"hello",
+        b"\n",
+        b"\ncode",
+        b"\r\ncode",
+        b"code\n",
+        b"a  b",
+        b"a&amp;b",
+        b"&",
+        b"\n\nfoo",
+        b"\ttab",
+        "caf\u{e9}".as_bytes(),
+        b"\xFF\xFE",
+    ];
+    for raw in raws {
+        for ws in [Whitespace::Collapse, Whitespace::Preserve] {
+            for boundary in [true, false] {
+                let t = HtmlText::new(raw, ws, boundary);
+                if let Some(fast) = t.as_str() {
+                    assert_eq!(
+                        fast,
+                        t.chars().collect::<String>(),
+                        "fast path disagreed for {raw:?} ws={ws:?} boundary={boundary}"
+                    );
+                }
+            }
+        }
+    }
+}

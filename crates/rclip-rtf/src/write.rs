@@ -523,7 +523,18 @@ fn escape_unicode(out: &mut Vec<u8>, c: char, fallback: bool) {
         out.extend_from_slice(br"\u");
         push_i32(out, i32::from(*unit as i16));
         if fallback {
-            out.push(ascii_fallback(c));
+            let f = ascii_fallback(c);
+            // A space directly after a control word's *parameter* is the
+            // delimiter and is consumed by the tokenizer, so a fallback space
+            // never reaches the `\ucN` counter -- which then skips whatever
+            // follows instead, and for `\u160 \u8211-` that is the whole en
+            // dash. Writing the delimiter explicitly puts the fallback space
+            // back where the counter can see it. Found by the
+            // `rtf_write_round_trip` fuzz target.
+            if f == b' ' {
+                out.push(b' ');
+            }
+            out.push(f);
         } else {
             // Without a fallback character the escape still needs terminating,
             // or `\u233` followed by the name's next digit reads as `⌱`.
