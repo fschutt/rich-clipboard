@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Viewer
+Exec="/opt/my app/bin/view" --flag=1 %U
+Icon=viewer
+MimeType=image/png;image/jpeg;

@@ -1,0 +1,7 @@
+{
+  "format": "text/uri-list",
+  "origin": "synthetic",
+  "description": "One URI followed by the trailing NUL that Qt 3 appended",
+  "expect": "ok",
+  "notes": "qmimedata.cpp carries a comment about this: 'Qt 3.x will send text/uri-list with a trailing null-terminator (that is *not* sent for any other text/* mime-type), so chop it off'."
+}

@@ -1,0 +1,7 @@
+{
+  "format": "application/x-desktop",
+  "origin": "synthetic",
+  "description": "Exec with a quoted program path containing a space and a %U field code",
+  "expect": "ok",
+  "notes": "Spec 7: an argument containing a reserved character must be quoted, and %U 'may only be used as an argument on their own'. Nothing here is ever executed."
+}

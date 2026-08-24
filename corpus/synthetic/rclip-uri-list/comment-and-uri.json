@@ -1,0 +1,7 @@
+{
+  "format": "text/uri-list",
+  "origin": "synthetic",
+  "description": "A leading comment line plus one URI containing a '#' fragment",
+  "expect": "ok",
+  "notes": "RFC 2483 5: '#' is only a comment character as the first character on a line, so the fragment in the second line must not be mistaken for one. RFC 2483 also says the first line of a mapped resolution SHOULD be a comment naming the original URI."
+}

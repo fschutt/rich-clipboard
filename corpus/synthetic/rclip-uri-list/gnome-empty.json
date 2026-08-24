@@ -1,0 +1,7 @@
+{
+  "format": "x-special/gnome-copied-files",
+  "origin": "synthetic",
+  "description": "Verb with no files at all",
+  "expect": "ok",
+  "notes": "Nautilus writes exactly four bytes for an empty selection - no LF. Must yield zero URIs rather than one empty one."
+}

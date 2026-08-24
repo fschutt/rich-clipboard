@@ -1,0 +1,7 @@
+{
+  "format": "text/uri-list",
+  "origin": "synthetic",
+  "description": "Bytes that are not UTF-8",
+  "expect": "error",
+  "notes": "ErrorKind::InvalidUtf8 at the offset of the first bad byte."
+}

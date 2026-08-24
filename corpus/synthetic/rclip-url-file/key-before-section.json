@@ -1,0 +1,7 @@
+{
+  "format": "application/x-mswinurl (.url)",
+  "origin": "synthetic",
+  "description": "A key=value line before the first section header",
+  "expect": "error",
+  "notes": "ErrorKind::Malformed. Win32's profile API drops such a line; making it an error means a caller cannot mistake the orphan URL for the real one."
+}

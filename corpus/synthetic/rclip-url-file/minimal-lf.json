@@ -1,0 +1,7 @@
+{
+  "format": "application/x-mswinurl (.url)",
+  "origin": "synthetic",
+  "description": "Only the required key, LF terminated",
+  "expect": "ok",
+  "notes": "URL is the only required key. LF instead of CRLF because a file that has been through a Unix text tool must still parse."
+}

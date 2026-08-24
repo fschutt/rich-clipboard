@@ -1,0 +1,7 @@
+{
+  "format": "application/x-kde-cutselection",
+  "origin": "synthetic",
+  "description": "KDE copy flag",
+  "expect": "ok",
+  "notes": "'0' is written for copy - this is not a cut-only marker. KIO's reader tests byte 0 only."
+}

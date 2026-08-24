@@ -1,0 +1,7 @@
+{
+  "format": "application/x-desktop",
+  "origin": "synthetic",
+  "description": "The spec's own locale example: Name plus sr_YU, sr@Latn and sr postfixes",
+  "expect": "ok",
+  "notes": "Spec 5 states that for LC_MESSAGES=sr_YU@Latn 'the value of the Name keyed by sr_YU is used', because the ladder is lang_COUNTRY@MODIFIER, lang_COUNTRY, lang@MODIFIER, lang. Also checks that asking for plain 'sr' must not pick up Name[sr@Latn]."
+}

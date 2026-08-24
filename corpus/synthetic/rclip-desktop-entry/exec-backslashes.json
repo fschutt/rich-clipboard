@@ -1,0 +1,7 @@
+{
+  "format": "application/x-desktop",
+  "origin": "synthetic",
+  "description": "The spec's four-backslash and \\\\$ examples inside quoted arguments",
+  "expect": "ok",
+  "notes": "Spec 7: 'to unambiguously represent a literal backslash character in a quoted argument requires the use of four successive backslash characters', and a literal dollar sign is '\\\\$'. Only correct if the value escape layer runs before the quoting layer."
+}

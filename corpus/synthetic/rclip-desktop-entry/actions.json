@@ -1,0 +1,7 @@
+{
+  "format": "application/x-desktop",
+  "origin": "synthetic",
+  "description": "Two Desktop Action groups referenced from Actions=",
+  "expect": "ok",
+  "notes": "Spec 11.1: the group is named 'Desktop Action <id>' and an action group whose id is not listed in Actions must be ignored."
+}

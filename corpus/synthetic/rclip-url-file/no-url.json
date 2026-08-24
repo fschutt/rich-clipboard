@@ -1,0 +1,7 @@
+{
+  "format": "application/x-mswinurl (.url)",
+  "origin": "synthetic",
+  "description": "An InternetShortcut section with no URL key",
+  "expect": "error",
+  "notes": "parse() succeeds because the file is structurally fine; require_url() reports ErrorKind::Malformed. URL is the only key the format requires."
+}

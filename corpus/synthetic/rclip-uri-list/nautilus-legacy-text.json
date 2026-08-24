@@ -1,0 +1,7 @@
+{
+  "format": "text/plain (Nautilus 3.30-3.38 file clipboard)",
+  "origin": "synthetic",
+  "description": "The pre-Nautilus-40 magic-first-line payload, with its trailing LF",
+  "expect": "ok",
+  "notes": "x-special/nautilus-clipboard was never a MIME type: it was a magic first line inside the text/plain payload (nautilus-clipboard.c 3.38.2 L88). Removed in Nautilus 40 by commit 2045f662. Unlike the modern format this one does have a trailing newline."
+}

@@ -1,0 +1,7 @@
+{
+  "format": "application/x-desktop",
+  "origin": "synthetic",
+  "description": "UTF-8 BOM and CRLF terminators",
+  "expect": "ok",
+  "notes": "The spec says lines are separated by linefeeds and says nothing about a BOM, but editors add one. Unstripped, '\\ufeff[Desktop Entry]' is not a group header and the file parses as empty; an unstripped CR makes the group name 'Desktop Entry\\r'."
+}

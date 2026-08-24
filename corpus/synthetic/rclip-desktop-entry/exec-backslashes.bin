@@ -1,0 +1,4 @@
+[Desktop Entry]
+Type=Application
+Name=Backslash
+Exec=/bin/prog "a\\\\b" "cost \\$5"

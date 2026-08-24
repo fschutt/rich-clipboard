@@ -1,0 +1,7 @@
+{
+  "format": "application/x-mswinurl (.url)",
+  "origin": "synthetic",
+  "description": "A section header with no closing bracket",
+  "expect": "error",
+  "notes": "ErrorKind::Malformed. Silently treating it as an entry would attribute the URL to no section, and to the previous section in a longer file."
+}

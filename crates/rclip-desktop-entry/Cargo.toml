@@ -1,0 +1,18 @@
+[package]
+name        = "rclip-desktop-entry"
+description = "Parser for freedesktop `.desktop` entries — groups, escapes, localized keys, Exec field codes"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[features]
+default = []
+## Enables the owning APIs: unescaping a value into a `String`.
+alloc = ["rclip-core/alloc"]
+std = ["alloc", "rclip-core/std"]
+
+[dependencies]
+rclip-core = { workspace = true }

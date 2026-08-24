@@ -1,0 +1,7 @@
+{
+  "format": "application/x-mswinurl (.url)",
+  "origin": "synthetic",
+  "description": "Lowercase section, spaces around '=', a quoted value, a ';' comment, uppercase key",
+  "expect": "ok",
+  "notes": "Wine's dlls/ieframe/intshcut.c writes ICONFILE=/ICONINDEX= and reads them back as iconfile/iconindex, which only round-trips because GetPrivateProfileString folds case. That API also strips whitespace around '=' and one matched pair of quotes, and treats ';' - not '#' - as the comment character."
+}

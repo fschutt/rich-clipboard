@@ -1,0 +1,7 @@
+{
+  "format": "x-special/gnome-copied-files",
+  "origin": "synthetic",
+  "description": "GNOME copy of a single file with percent-encoded space and parentheses",
+  "expect": "ok",
+  "notes": "Single-file case; also checks that a lone URI with no separator parses."
+}

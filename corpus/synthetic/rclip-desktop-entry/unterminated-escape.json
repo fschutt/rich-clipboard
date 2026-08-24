@@ -1,0 +1,7 @@
+{
+  "format": "application/x-desktop",
+  "origin": "synthetic",
+  "description": "A value ending in a lone backslash, with a real key on the next line",
+  "expect": "error",
+  "notes": "parse() succeeds - this is structurally a valid file - and decoding Name yields ErrorKind::UnexpectedEof. Named for the failure mode in freedesktop_entry_parser, whose line-continuation logic swallows the rest of the line and the following Exec= key into the Name value, making Exec disappear from the entry entirely."
+}

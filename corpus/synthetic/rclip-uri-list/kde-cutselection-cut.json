@@ -1,0 +1,7 @@
+{
+  "format": "application/x-kde-cutselection",
+  "origin": "synthetic",
+  "description": "KDE cut flag",
+  "expect": "ok",
+  "notes": "KIO src/widgets/paste.cpp: cut ? \"1\" : \"0\". One byte, no newline."
+}

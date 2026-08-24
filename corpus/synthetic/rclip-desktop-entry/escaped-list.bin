@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Exec=/usr/bin/foo
+Name=Escaped\sSpace
+Categories=Network;Web\;Browser;Utility;
+Comment=Line one\nline two\ttabbed

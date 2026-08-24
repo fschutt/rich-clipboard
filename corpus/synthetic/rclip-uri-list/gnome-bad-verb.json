@@ -1,0 +1,7 @@
+{
+  "format": "x-special/gnome-copied-files",
+  "origin": "synthetic",
+  "description": "First line is a verb that does not exist",
+  "expect": "error",
+  "notes": "There is no 'move' or 'link' verb - only 'copy' and 'cut'. Must be ErrorKind::BadMagic, not a silent fallback to copy with 'move' misread as a URI."
+}

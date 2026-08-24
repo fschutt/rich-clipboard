@@ -1,0 +1,7 @@
+{
+  "format": "application/x-desktop",
+  "origin": "synthetic",
+  "description": "A group header with no closing bracket",
+  "expect": "error",
+  "notes": "Treating it as an entry would attribute every following key to no group at all; ErrorKind::Malformed at the header line."
+}

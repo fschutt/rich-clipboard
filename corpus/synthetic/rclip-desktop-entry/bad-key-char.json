@@ -1,0 +1,7 @@
+{
+  "format": "application/x-desktop",
+  "origin": "synthetic",
+  "description": "A key name containing a space",
+  "expect": "error",
+  "notes": "Spec 3.3: 'Only the characters A-Za-z0-9- may be used in key names.'"
+}

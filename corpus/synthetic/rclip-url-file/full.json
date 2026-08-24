@@ -1,0 +1,7 @@
+{
+  "format": "application/x-mswinurl (.url)",
+  "origin": "synthetic",
+  "description": "Every documented optional key, CRLF terminated",
+  "expect": "ok",
+  "notes": "The sample file from the cyanwerks unofficial guide, plus IDList. HotKey=1601 is 0x0641: VK 0x41 ('A') with HOTKEYF_CONTROL|HOTKEYF_ALT, which that guide's table lists as Ctrl+Alt+A. Modified is eight little-endian FILETIME bytes plus one trailing byte the guide calls a checksum."
+}

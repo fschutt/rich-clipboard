@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Exec=/usr/bin/foo
+Name=Foo
+Name[sr_YU]=Foo sr_YU
+Name[sr@Latn]=Foo sr Latn
+Name[sr]=Foo sr

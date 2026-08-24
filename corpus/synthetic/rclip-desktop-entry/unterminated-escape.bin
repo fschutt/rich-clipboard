@@ -1,0 +1,4 @@
+[Desktop Entry]
+Type=Application
+Name=Trailing\
+Exec=/usr/bin/evil --pwn

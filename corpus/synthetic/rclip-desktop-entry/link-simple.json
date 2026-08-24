@@ -1,0 +1,7 @@
+{
+  "format": "application/x-desktop (Type=Link)",
+  "origin": "synthetic",
+  "description": "The minimal Type=Link entry - the .url / .webloc analogue",
+  "expect": "ok",
+  "notes": "Desktop Entry Spec 6: the URL key 'has to be present when and only when the value of the Type key is Link'."
+}

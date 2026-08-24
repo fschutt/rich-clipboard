@@ -1,0 +1,7 @@
+{
+  "format": "application/x-mswinurl (.url)",
+  "origin": "synthetic",
+  "description": "UTF-8 byte-order mark before the section header",
+  "expect": "ok",
+  "notes": "Windows text editors add one by default. Unstripped, the first line does not start with '[' and the whole file reads as having no sections."
+}

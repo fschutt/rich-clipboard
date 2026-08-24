@@ -1,0 +1,19 @@
+[package]
+name        = "rclip-uri-list"
+description = "RFC 2483 `text/uri-list` plus the GNOME/KDE cut-vs-copy clipboard conventions"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[features]
+default = []
+## Enables percent-decoding and the serializers, both of which must own their
+## output. Percent-*validating* and iterating do not need it.
+alloc = ["rclip-core/alloc"]
+std = ["alloc", "rclip-core/std"]
+
+[dependencies]
+rclip-core = { workspace = true }

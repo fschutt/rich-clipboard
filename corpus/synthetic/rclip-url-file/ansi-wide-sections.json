@@ -1,0 +1,7 @@
+{
+  "format": "application/x-mswinurl (.url)",
+  "origin": "synthetic",
+  "description": "The property-set section plus the .A and .W companion sections",
+  "expect": "ok",
+  "notes": "The encoding of the .A and .W URL values is not documented anywhere; even the NSIS wiki annotates them '; CP_ACP stuff?' and '; UTF-7 stuff?'. This crate returns them verbatim and decodes nothing."
+}

@@ -1,0 +1,7 @@
+{
+  "format": "application/x-desktop",
+  "origin": "synthetic",
+  "description": "A key=value line before any group header",
+  "expect": "error",
+  "notes": "Spec 3.2: 'There should be nothing preceding this group in the desktop entry file but possibly one or more comments.' There is no group to file the entry under, so this is ErrorKind::Malformed at the orphan line rather than a silently dropped key."
+}

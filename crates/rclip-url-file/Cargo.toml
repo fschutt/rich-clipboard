@@ -1,0 +1,19 @@
+[package]
+name        = "rclip-url-file"
+description = "Parser for Windows `.url` InternetShortcut files"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[features]
+default = []
+## Enables owning APIs: unquoting into a `String`, `ShortcutTarget` conversions
+## that must copy.
+alloc = ["rclip-core/alloc"]
+std = ["alloc", "rclip-core/std"]
+
+[dependencies]
+rclip-core = { workspace = true }

@@ -1,0 +1,7 @@
+{
+  "format": "x-special/gnome-copied-files",
+  "origin": "synthetic",
+  "description": "GNOME cut of two files: verb line, LF separators, no trailing newline",
+  "expect": "ok",
+  "notes": "Matches Nautilus src/nautilus-clipboard.c exactly: g_string_new(cut ? \"cut\" : \"copy\") then g_string_append_c('\\n') before each URI. Nautilus 44+ rejects the payload outright if a trailing newline produces an empty line."
+}

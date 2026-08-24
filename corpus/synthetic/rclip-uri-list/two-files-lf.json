@@ -1,0 +1,7 @@
+{
+  "format": "text/uri-list",
+  "origin": "synthetic",
+  "description": "Two file URIs, LF separated, no trailing newline",
+  "expect": "ok",
+  "notes": "RFC 2483 asks for CRLF; GLib's g_uri_list_extract_uris documents that it also allows LF, and Chromium's URIListToFileInfos splits on a character set. Both must parse."
+}

@@ -1,0 +1,4 @@
+[internetshortcut]
+url = "https://example.com/x"
+; a comment
+ICONINDEX=0x2

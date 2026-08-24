@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Browser
+Exec=/usr/bin/browser %U
+Actions=new-window;new-private;
+
+[Desktop Action new-window]
+Name=New Window
+Exec=/usr/bin/browser --new-window
+
+[Desktop Action new-private]
+Name=New Private Window
+Exec=/usr/bin/browser --private

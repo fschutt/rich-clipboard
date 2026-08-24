@@ -1,0 +1,7 @@
+{
+  "format": "text/uri-list",
+  "origin": "synthetic",
+  "description": "Two file URIs, CRLF after each including the last, one percent-encoded space",
+  "expect": "ok",
+  "notes": "Byte-for-byte the shape GTK's gdkcontentserializer.c file_uri_serializer and Qt's QMimeData::retrieveTypedData emit: CRLF after every URI, trailing one included."
+}

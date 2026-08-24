@@ -1,0 +1,7 @@
+{
+  "format": "application/x-desktop",
+  "origin": "synthetic",
+  "description": "A list with an escaped separator, plus \\s \\n \\t in ordinary values",
+  "expect": "ok",
+  "notes": "The escaped semicolon must not split: three categories, the middle one 'Web;Browser'. This is the case freedesktop-file-parser gets wrong by splitting on a bare ';' and freedesktop-desktop-entry gets wrong by unescaping first (and by rejecting \\; outright)."
+}
