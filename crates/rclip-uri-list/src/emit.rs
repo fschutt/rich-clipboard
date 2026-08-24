@@ -98,6 +98,21 @@ mod with_alloc {
     /// function is already a URI, and re-encoding one would double every `%`
     /// it already contains. Turn a *path* into a URI with [`file_uri`] first,
     /// which is the direction where the escaping question has an answer.
+    /// # A leading BOM
+    ///
+    /// If the first URI itself starts with U+FEFF, this writes a BOM *before*
+    /// it. That looks redundant and is not: [`crate::parse`] strips a BOM at
+    /// offset 0 as an encoding mark, so a payload whose first bytes are a
+    /// content BOM comes back one character shorter and, if that was the whole
+    /// URI, one URI shorter. Emitting the encoding mark explicitly pushes the
+    /// content BOM to offset 3 where it survives, which is the ordinary way a
+    /// BOM-aware text format escapes a leading BOM.
+    ///
+    /// Nothing else is affected — the prefix appears only when the output would
+    /// otherwise open with a BOM. U+FEFF cannot occur in a real URI anyway
+    /// (RFC 3986 URIs are ASCII), so in practice this fires only for a "URI"
+    /// that a lenient read produced from junk. Found by the `uri_list_parse`
+    /// fuzz target, whose round-trip property it was violating.
     #[must_use]
     pub fn write_uri_list<'a, I>(uris: I) -> Vec<u8>
     where
@@ -105,6 +120,9 @@ mod with_alloc {
     {
         let mut out = Vec::new();
         for uri in uris {
+            if out.is_empty() && uri.as_bytes().starts_with(crate::BOM) {
+                out.extend_from_slice(crate::BOM);
+            }
             out.extend_from_slice(uri.as_bytes());
             out.extend_from_slice(b"\r\n");
         }

@@ -80,6 +80,13 @@ pub struct UriList<'a> {
     base: usize,
 }
 
+/// The UTF-8 byte-order mark.
+///
+/// Shared by the reader, which strips it at offset 0 as an encoding mark, and
+/// [`emit::write_uri_list`], which has to know not to emit one by accident.
+/// One definition so the two can never disagree about what a BOM is.
+pub(crate) const BOM: &[u8] = &[0xEF, 0xBB, 0xBF];
+
 /// Parse a `text/uri-list`.
 ///
 /// # Errors
@@ -102,7 +109,7 @@ pub fn parse(bytes: &[u8]) -> Result<UriList<'_>> {
 /// of the last filename at worst.
 fn decode(bytes: &[u8]) -> Result<(&str, usize)> {
     let mut r = Reader::new(bytes);
-    let base = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+    let base = if bytes.starts_with(BOM) {
         r.skip(3)?;
         3
     } else {

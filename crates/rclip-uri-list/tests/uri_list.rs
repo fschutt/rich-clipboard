@@ -730,3 +730,58 @@ fn the_one_byte_where_this_diverges_from_glib_is_pinned() {
         );
     }
 }
+
+#[test]
+fn a_uri_that_starts_with_a_bom_survives_the_round_trip() {
+    use rclip_uri_list::emit;
+
+    // Found by the `uri_list_parse` fuzz target, minimised to four bytes:
+    // a space then a UTF-8 BOM.
+    //
+    // The BOM is not at offset 0 there, so it is content rather than an
+    // encoding mark, and the line trims to a "URI" of U+FEFF. Writing that URI
+    // used to put the BOM *at* offset 0, where the reader correctly strips it
+    // as an encoding mark — so the writer emitted a payload its own reader read
+    // differently, and the URI vanished entirely.
+    let list = rclip_uri_list::parse(b" \xEF\xBB\xBF").expect("parses");
+    let uris: Vec<&str> = list.uris().map(|u| u.as_str()).collect();
+    assert_eq!(
+        uris,
+        vec!["\u{FEFF}"],
+        "the BOM is content, not a mark, here"
+    );
+
+    let blob = emit::write_uri_list(uris.iter().copied());
+    assert!(
+        blob.starts_with(b"\xEF\xBB\xBF\xEF\xBB\xBF"),
+        "the encoding mark is emitted so the content BOM lands at offset 3: {blob:02X?}"
+    );
+
+    let round = rclip_uri_list::parse(&blob).expect("our own output must parse");
+    let again: Vec<&str> = round.uris().map(|u| u.as_str()).collect();
+    assert_eq!(again, uris, "the URI must survive a write/read cycle");
+
+    // And the cycle is a fixed point, not merely reversible once.
+    assert_eq!(emit::write_uri_list(again.iter().copied()), blob);
+}
+
+#[test]
+fn the_bom_prefix_appears_only_when_it_is_needed() {
+    use rclip_uri_list::emit;
+
+    // The escape must not leak into ordinary output.
+    let ordinary = emit::write_uri_list(["file:///tmp/a", "file:///tmp/b"]);
+    assert_eq!(ordinary, b"file:///tmp/a\r\nfile:///tmp/b\r\n".to_vec());
+    assert!(!ordinary.starts_with(b"\xEF\xBB\xBF"));
+
+    // A BOM anywhere but the first byte of the payload needs no help, because
+    // the reader only strips one at offset 0.
+    let later = emit::write_uri_list(["file:///tmp/a", "\u{FEFF}b"]);
+    assert!(!later.starts_with(b"\xEF\xBB\xBF"));
+    let back: Vec<&str> = rclip_uri_list::parse(&later)
+        .unwrap()
+        .uris()
+        .map(|u| u.as_str())
+        .collect();
+    assert_eq!(back, vec!["file:///tmp/a", "\u{FEFF}b"]);
+}
