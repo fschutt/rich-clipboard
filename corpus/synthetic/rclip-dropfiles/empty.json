@@ -1,0 +1,7 @@
+{
+  "format": "CF_HDROP",
+  "origin": "synthetic",
+  "description": "Zero files: the path array is nothing but its terminator",
+  "expect": "ok",
+  "notes": "Legal per the docs - the array terminator is one extra NUL after the last string, and with no strings that is the whole array. Must parse to zero paths, not to one empty path and not to an error."
+}

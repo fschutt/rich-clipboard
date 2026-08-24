@@ -1,0 +1,7 @@
+{
+  "format": "CFSTR_FILEDESCRIPTORW",
+  "origin": "synthetic",
+  "description": "cItems=1 but only 100 of the descriptor's 592 bytes are present",
+  "expect": "error",
+  "notes": "Expect ErrorKind::TooLarge - the count is checked against the remaining input before any slot is read, so a short buffer fails at the count rather than partway through a descriptor."
+}

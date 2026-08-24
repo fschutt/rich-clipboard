@@ -1,0 +1,21 @@
+[package]
+name        = "rclip-file-desc"
+description = "CFSTR_FILEDESCRIPTORW parser and serializer: Win32 virtual / promised file descriptors"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[features]
+default = []
+## Enables the serializer, which must own its output.
+alloc = ["rclip-core/alloc"]
+std = ["alloc", "rclip-core/std"]
+
+[dependencies]
+rclip-core = { workspace = true }
+
+[dev-dependencies]
+rclip-file-desc = { path = ".", features = ["std"] }

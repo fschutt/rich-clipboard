@@ -1,0 +1,7 @@
+{
+  "format": "CF_HDROP",
+  "origin": "synthetic",
+  "description": "Two paths with fWide=0, i.e. system ANSI single-byte entries",
+  "expect": "ok",
+  "notes": "Byte-for-byte the example in the CF_HDROP docs. The codepage is not in the payload, so the parser exposes raw bytes; these happen to be ASCII, which every ANSI codepage agrees on."
+}

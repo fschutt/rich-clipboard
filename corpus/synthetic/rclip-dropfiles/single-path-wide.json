@@ -1,0 +1,7 @@
+{
+  "format": "CF_HDROP",
+  "origin": "synthetic",
+  "description": "One path, fWide=1 - the minimal non-empty list",
+  "expect": "ok",
+  "notes": "The off-by-one case: the array is 'C:\\a.txt' NUL NUL, and a parser that stops at the first NUL yields one path while one that requires two NULs before the first entry yields none."
+}

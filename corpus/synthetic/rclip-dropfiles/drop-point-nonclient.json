@@ -1,0 +1,7 @@
+{
+  "format": "CF_HDROP",
+  "origin": "synthetic",
+  "description": "One path with a real drop point at (1280,720) and fNC=1",
+  "expect": "ok",
+  "notes": "pt and fNC are not decoration: fNC=1 means pt is in screen rather than client coordinates, which is what a drop onto a title bar produces."
+}

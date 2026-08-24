@@ -1,0 +1,7 @@
+{
+  "format": "CFSTR_FILEDESCRIPTORW",
+  "origin": "synthetic",
+  "description": "Two descriptors with disjoint flag sets: a 4 GiB+32 byte file with size/attributes/write-time/progress, and a directory with clsid/sizepoint/linkui and a junk file size whose FD_FILESIZE is clear",
+  "expect": "ok",
+  "notes": "Hand-built to the FILEDESCRIPTORW layout in MS docs; 592 bytes each, cItems first. The second name is non-ASCII, and its nFileSize halves hold 0xDEADBEEF with FD_FILESIZE clear so that a parser which ignores dwFlags is caught."
+}

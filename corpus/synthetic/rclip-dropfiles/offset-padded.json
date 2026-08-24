@@ -1,0 +1,7 @@
+{
+  "format": "CF_HDROP",
+  "origin": "synthetic",
+  "description": "pFiles=24, so four bytes of padding sit between header and array",
+  "expect": "ok",
+  "notes": "pFiles is documented as 'the offset of the file list from the beginning of this structure', not as a constant. A parser that hardcodes 20 reads four bytes of padding as the start of the first path."
+}

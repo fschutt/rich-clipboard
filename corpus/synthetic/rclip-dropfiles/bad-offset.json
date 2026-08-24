@@ -1,0 +1,7 @@
+{
+  "format": "CF_HDROP",
+  "origin": "synthetic",
+  "description": "pFiles=65536, far past the end of the 40-byte buffer",
+  "expect": "error",
+  "notes": "Expect ErrorKind::BadOffset. This is the shape of the bug that turns into an out-of-bounds read in a C parser that trusts pFiles."
+}

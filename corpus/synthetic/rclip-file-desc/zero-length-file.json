@@ -1,0 +1,7 @@
+{
+  "format": "CFSTR_FILEDESCRIPTORW",
+  "origin": "synthetic",
+  "description": "One descriptor promising a zero-length file",
+  "expect": "ok",
+  "notes": "The docs: 'To create a zero-length file, set the FD_FILESIZE flag in dwFlags, and set nFileSizeHigh and nFileSizeLow to zero.' So file_size() must read Some(0) here and None when the flag is clear."
+}

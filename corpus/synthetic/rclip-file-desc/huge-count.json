@@ -1,0 +1,7 @@
+{
+  "format": "CFSTR_FILEDESCRIPTORW",
+  "origin": "synthetic",
+  "description": "cItems=0xFFFFFFFF with a single 592-byte descriptor behind it",
+  "expect": "error",
+  "notes": "Expect ErrorKind::TooLarge. 4294967295 x 592 is 2.3 TiB; sizing a Vec or a loop from cItems before checking it against the buffer is a one-line OOM."
+}

@@ -1,0 +1,7 @@
+{
+  "format": "CF_HDROP",
+  "origin": "synthetic",
+  "description": "One path whose NUL is present but the array terminator is not",
+  "expect": "error",
+  "notes": "Expect ErrorKind::UnexpectedEof. DragQueryFile would keep reading past the end of the HGLOBAL looking for the empty string; refusing is the only safe answer."
+}

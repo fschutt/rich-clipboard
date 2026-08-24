@@ -1,0 +1,7 @@
+{
+  "format": "CFSTR_FILEDESCRIPTORW",
+  "origin": "synthetic",
+  "description": "cItems=0 and no descriptor array at all",
+  "expect": "ok",
+  "notes": "Four bytes total. Legal, if pointless; must not be confused with a truncated payload."
+}
