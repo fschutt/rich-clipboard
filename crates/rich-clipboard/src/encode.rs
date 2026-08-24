@@ -91,9 +91,10 @@ pub fn encode_with(
         };
         let native = String::from(native);
         match encode_flavor(item, entry, platform, options) {
-            Ok(blobs) => {
-                for bytes in blobs {
-                    payload.push(ClipboardItem::new(native.clone(), bytes));
+            Ok(emitted) => {
+                for (n, bytes) in emitted.blobs.into_iter().enumerate() {
+                    let index = if emitted.per_item { n } else { 0 };
+                    payload.push(ClipboardItem::in_item(index, native.clone(), bytes));
                 }
             }
             Err(feature) => missing = missing.or(Some(feature)),
@@ -110,27 +111,56 @@ pub fn encode_with(
     Ok(payload)
 }
 
-/// The blobs to publish under one flavor.
+/// What one flavor contributes to the payload.
 ///
-/// Usually zero (the flavor does not apply to this item) or one. It is a `Vec`
-/// because of macOS: a pasteboard models a multi-file selection as N *items*,
-/// each carrying one `public.file-url`, and there is no other way to say "these
-/// four files" there. `Err` names the Cargo feature whose codec was missing.
-type FlavorResult = core::result::Result<Vec<Vec<u8>>, &'static str>;
+/// Usually zero blobs (the flavor does not apply to this item) or one. It is a
+/// `Vec` because of macOS: a pasteboard models a multi-file selection as N
+/// *items*, each carrying one `public.file-url`, and there is no other way to
+/// say "these four files" there.
+///
+/// `per_item` is the difference between those two situations, and it is a
+/// property of the *flavor*, not of the payload. Four `public.file-url` blobs
+/// are four items; four blobs under any other flavor would be one item
+/// advertising the same type four times, which is malformed. Only the encoder
+/// that produced them knows which it meant, so it says.
+struct Emitted {
+    blobs: Vec<Vec<u8>>,
+    /// One pasteboard item per blob, rather than all of them in item 0.
+    per_item: bool,
+}
+
+/// `Err` names the Cargo feature whose codec was missing.
+type FlavorResult = core::result::Result<Emitted, &'static str>;
+
+fn grouped(blobs: Vec<Vec<u8>>) -> FlavorResult {
+    Ok(Emitted {
+        blobs,
+        per_item: false,
+    })
+}
 
 fn none() -> FlavorResult {
-    Ok(Vec::new())
+    grouped(Vec::new())
 }
 
 /// Every caller is behind a format feature; a build with none of them on
 /// publishes only plain text, which goes through [`maybe`].
 #[cfg_attr(not(feature = "full"), allow(dead_code))]
 fn one(bytes: Vec<u8>) -> FlavorResult {
-    Ok(alloc::vec![bytes])
+    grouped(alloc::vec![bytes])
 }
 
 fn maybe(bytes: Option<Vec<u8>>) -> FlavorResult {
-    Ok(bytes.into_iter().collect())
+    grouped(bytes.into_iter().collect())
+}
+
+/// One pasteboard item per blob. macOS only — nothing else has items.
+#[cfg(feature = "file-list")]
+fn per_item(blobs: Vec<Vec<u8>>) -> FlavorResult {
+    Ok(Emitted {
+        blobs,
+        per_item: true,
+    })
 }
 
 fn encode_flavor(
@@ -146,19 +176,12 @@ fn encode_flavor(
         Flavor::Rtf => encode_rtf(item),
         Flavor::Html => encode_html(item, platform),
 
-        Flavor::DibV5 => encode_dib(item, options),
+        Flavor::DibV5 => encode_dib_v5(item, options),
+        Flavor::Dib => encode_dib_legacy(item),
         Flavor::Png => maybe(encoded_image_bytes(item, ImageFormat::Png)),
         Flavor::Jpeg => maybe(encoded_image_bytes(item, ImageFormat::Jpeg)),
         Flavor::Gif => maybe(encoded_image_bytes(item, ImageFormat::Gif)),
         Flavor::Tiff => maybe(encoded_image_bytes(item, ImageFormat::Tiff)),
-        // `rclip-dib`'s encoder emits exactly one shape — 32-bpp BI_BITFIELDS
-        // BITMAPV5HEADER — because a producer has no reason to write a format
-        // that cannot carry alpha. So the `CF_DIB` line of the Windows plan is
-        // advertised and never filled.
-        //
-        // TODO(phase-5): a `CF_DIB` (BITMAPINFOHEADER) encoder in `rclip-dib`,
-        // for the Win32 applications that read `CF_DIB` and not `CF_DIBV5`.
-        Flavor::Dib => none(),
 
         Flavor::FileList => encode_file_list(item, platform),
         Flavor::DropEffect => maybe(drop_effect_bytes(item)),
@@ -185,20 +208,68 @@ fn encode_flavor(
     }
 }
 
+/// The bytes for an encoded-image flavor: `public.png`, `PNG`, `public.tiff`.
+///
+/// Already-encoded bytes are passed through when the format matches, and never
+/// transcoded between formats — a PNG on the clipboard is offered as PNG and
+/// not as TIFF, because re-encoding one lossless format as another costs time
+/// and gains nothing a receiver asked for.
+///
+/// Pixels are encoded here only with the `image` feature on. `plan/PLAN.md`
+/// §4.4 keeps PNG, JPEG, GIF and TIFF encoders out of this *workspace* on
+/// purpose — they have good implementations already — and delegates; the
+/// `image` feature is that delegation, kept optional so the default dependency
+/// graph is unchanged. Without it a consumer holding pixels should encode
+/// first and hand over an [`Image::Encoded`].
 fn encoded_image_bytes(item: &RichItem, want: ImageFormat) -> Option<Vec<u8>> {
     match item {
         RichItem::Image(Image::Encoded { format, bytes }) if *format == want => Some(bytes.clone()),
-        // A decoded image cannot be re-encoded here: `plan/PLAN.md` §4.4 keeps
-        // PNG, JPEG, GIF and TIFF out of this workspace on purpose, so there is
-        // no encoder to call. A consumer that has `image` should encode first
-        // and hand over an `Image::Encoded`.
-        //
-        // TODO(phase-5): an optional `image` feature on this crate that closes
-        // the loop, so `Image::Rgba` can be published on macOS at all — the
-        // plan there offers `public.png` and `public.tiff`, and this crate can
-        // produce neither from pixels.
+        #[cfg(feature = "image")]
+        RichItem::Image(Image::Rgba(img)) => encode_pixels(img, want),
         _ => None,
     }
+}
+
+/// Encode pixels as `want`, through the `image` crate.
+///
+/// PNG and TIFF only. They are the two the fan-out table names — `public.png`
+/// and `public.tiff` on macOS, `PNG` on Windows, `image/png` on X11 and Wayland
+/// — and adding JPEG would mean choosing a quality factor on the user's behalf
+/// for a clipboard image that is very often a screenshot of text.
+///
+/// `None` rather than an error for a dimension mismatch: a caller who built an
+/// `RgbaImage` whose buffer does not match its dimensions gets the rest of the
+/// fan-out, which is the same treatment every other flavor's bad input gets.
+#[cfg(feature = "image")]
+fn encode_pixels(img: &crate::item::RgbaImage, want: ImageFormat) -> Option<Vec<u8>> {
+    use image::{ExtendedColorType, ImageEncoder};
+
+    let expected = (img.width as usize)
+        .checked_mul(img.height as usize)?
+        .checked_mul(4)?;
+    if img.pixels.len() < expected || img.width == 0 || img.height == 0 {
+        return None;
+    }
+    let pixels = &img.pixels[..expected];
+
+    let mut out = Vec::new();
+    match want {
+        ImageFormat::Png => {
+            image::codecs::png::PngEncoder::new(&mut out)
+                .write_image(pixels, img.width, img.height, ExtendedColorType::Rgba8)
+                .ok()?;
+        }
+        // The TIFF encoder back-patches its IFD offsets, so it needs `Seek` and
+        // therefore a cursor rather than a bare `Vec`.
+        ImageFormat::Tiff => {
+            let mut cursor = std::io::Cursor::new(&mut out);
+            image::codecs::tiff::TiffEncoder::new(&mut cursor)
+                .write_image(pixels, img.width, img.height, ExtendedColorType::Rgba8)
+                .ok()?;
+        }
+        _ => return None,
+    }
+    Some(out)
 }
 
 fn drop_effect_bytes(item: &RichItem) -> Option<Vec<u8>> {
@@ -265,7 +336,7 @@ fn encode_html(_item: &RichItem, _platform: Platform) -> FlavorResult {
 }
 
 #[cfg(feature = "dib")]
-fn encode_dib(item: &RichItem, options: &Options) -> FlavorResult {
+fn encode_dib_v5(item: &RichItem, options: &Options) -> FlavorResult {
     let RichItem::Image(Image::Rgba(img)) = item else {
         return none();
     };
@@ -279,7 +350,42 @@ fn encode_dib(item: &RichItem, options: &Options) -> FlavorResult {
 }
 
 #[cfg(not(feature = "dib"))]
-fn encode_dib(_item: &RichItem, _options: &Options) -> FlavorResult {
+fn encode_dib_v5(_item: &RichItem, _options: &Options) -> FlavorResult {
+    Err("dib")
+}
+
+/// `CF_DIB`: a 40-byte `BITMAPINFOHEADER`, 24 bpp, for the Win32 applications
+/// that read it and not `CF_DIBV5`.
+///
+/// The format has no alpha channel, so the one decision here is what becomes of
+/// it. [`Flatten::OVER_WHITE`] rather than `Discard`: this flavor is the
+/// fall-back for a consumer that cannot do transparency, and such a consumer is
+/// almost always compositing onto a white page. Discarding instead would keep
+/// the colour underneath a fully transparent pixel, which in a straight-alpha
+/// buffer is usually black — so a screenshot with rounded transparent corners
+/// would paste into Paint with black corners rather than with none.
+///
+/// The `CF_DIBV5` published alongside it still carries the real alpha, and it
+/// is first in the plan, so nothing that can see the alpha is made to look at
+/// this one.
+#[cfg(feature = "dib")]
+fn encode_dib_legacy(item: &RichItem) -> FlavorResult {
+    let RichItem::Image(Image::Rgba(img)) = item else {
+        return none();
+    };
+    maybe(
+        rclip_dib::encode_dib(
+            img.width,
+            img.height,
+            &img.pixels,
+            rclip_dib::Flatten::OVER_WHITE,
+        )
+        .ok(),
+    )
+}
+
+#[cfg(not(feature = "dib"))]
+fn encode_dib_legacy(_item: &RichItem) -> FlavorResult {
     Err("dib")
 }
 
@@ -303,14 +409,16 @@ fn encode_file_list(item: &RichItem, platform: Platform) -> FlavorResult {
             }
             one(builder.finish())
         }
-        // One pasteboard item per file. `ClipboardPayload` is a flat list, so
-        // they come out as repeated `public.file-url` entries and the transport
-        // groups them.
-        Platform::MacOs => Ok(list
-            .entries
-            .iter()
-            .map(|e| text::encode_plain(&to_uri(e), platform))
-            .collect()),
+        // One pasteboard *item* per file, which is the only way to say "these
+        // four files" on a macOS pasteboard: an item offering `public.file-url`
+        // four times is one file advertised four times, and
+        // `-[NSPasteboard dataForType:]` would read back the first.
+        Platform::MacOs => per_item(
+            list.entries
+                .iter()
+                .map(|e| text::encode_plain(&to_uri(e), platform))
+                .collect(),
+        ),
         Platform::Unix => {
             let uris: Vec<String> = list.entries.iter().map(to_uri).collect();
             one(rclip_uri_list::emit::write_uri_list(
@@ -384,42 +492,32 @@ fn encode_file_desc(_item: &RichItem) -> FlavorResult {
 
 /// Turn a [`FileEntry`](crate::FileEntry) into the URI a `text/uri-list` wants.
 ///
-/// A path becomes a percent-encoded `file://` URI; a URI is passed through
-/// verbatim, because it was already encoded when it arrived and re-encoding
-/// would double every `%`.
+/// A path becomes a percent-encoded `file://` URI through
+/// [`rclip_uri_list::emit::file_uri`]; a URI is passed through verbatim,
+/// because it was already encoded when it arrived and re-encoding would double
+/// every `%`.
 ///
-/// The percent-*encoder* lives here because `rclip-uri-list` has a decoder and
-/// no encoder — its `emit` module writes URIs through verbatim and says so:
-/// "percent-encoding them is the caller's job".
+/// The encoding is `EncodeSet::Path` — RFC 3986 `pchar` plus `/` — which is
+/// what makes a comparison on the receiving side work: §6.2.2.2 is explicit
+/// that a percent-encoded reserved character is *not* equivalent to its literal
+/// form, so a URI that escapes more than GTK does is a URI that stops matching
+/// the ones every GTK application produces.
 ///
-/// `// TODO(phase-5):` move this into `rclip-uri-list` next to
-/// `Uri::percent_decode`, which is its mirror.
+/// Measured against real GLib 2.88 rather than assumed: over every printable
+/// ASCII byte and a range of multi-byte UTF-8, this agrees with
+/// `g_filename_to_uri` on all of them but one. GLib escapes `;` as `%3B` and
+/// this does not, because `g_filename_to_uri` does not in fact use
+/// `G_URI_RESERVED_CHARS_ALLOWED_IN_PATH` — it escapes against an *unsafe* list
+/// whose allowed reserved set is `:@&=+$,` plus `/`, and `;` is not in it. Both
+/// spellings percent-decode to the same path, so nothing is lost or misread;
+/// what differs is a textual comparison against a URI GTK minted itself, for a
+/// filename containing a semicolon.
 #[cfg(feature = "file-list")]
 fn to_uri(entry: &crate::item::FileEntry) -> String {
     use crate::item::FileEntry;
 
-    const HEX: &[u8; 16] = b"0123456789ABCDEF";
-
     match entry {
         FileEntry::Uri(u) => u.clone(),
-        FileEntry::Path(p) => {
-            let mut out = String::from("file://");
-            for &b in p.as_bytes() {
-                match b {
-                    // RFC 3986 unreserved, plus the separators a path is made
-                    // of. `%` is deliberately *not* in the set: a literal `%`
-                    // in a filename must become `%25` or the reader takes it
-                    // for an escape.
-                    b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' => out.push(b as char),
-                    b'-' | b'.' | b'_' | b'~' | b'/' | b':' => out.push(b as char),
-                    other => {
-                        out.push('%');
-                        out.push(HEX[usize::from(other >> 4)] as char);
-                        out.push(HEX[usize::from(other & 0x0F)] as char);
-                    }
-                }
-            }
-            out
-        }
+        FileEntry::Path(p) => rclip_uri_list::emit::file_uri(p),
     }
 }

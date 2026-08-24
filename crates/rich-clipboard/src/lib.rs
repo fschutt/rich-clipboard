@@ -78,7 +78,13 @@
 //!
 //! Every format is behind a feature and every format is off by default. An
 //! application that pastes text and images must not compile a `.lnk` parser to
-//! do it. See the crate README for the table; `full` turns everything on.
+//! do it. See the crate README for the table; `full` turns on every format.
+//!
+//! `image` is outside `full` and is not a format: it is the delegation
+//! `plan/PLAN.md` §4.4 asks for, letting `Image::Rgba` be encoded as PNG and
+//! TIFF so it has a macOS representation at all. It is the one dependency here
+//! that is not a `rclip-*` codec, which is why turning it on is a decision
+//! rather than part of "everything".
 //!
 //! A flavor whose feature is off is not silently skipped: [`decode`] returns
 //! [`Error::FeatureDisabled`] naming the Cargo feature to turn on, and

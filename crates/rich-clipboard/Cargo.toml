@@ -83,6 +83,21 @@ bookmark = ["dep:rclip-bookmark"]
 ## freedesktop `.desktop` entries, including `Type=Link`.
 desktop-entry = ["dep:rclip-desktop-entry"]
 
+## Encode `Image::Rgba` as PNG and TIFF, through the `image` crate.
+##
+## Not a format feature and deliberately not in `full`: it is a *delegation*.
+## `plan/PLAN.md` §4.4 scopes PNG and TIFF out of this workspace on purpose —
+## "delegate to `image` or azul's existing decoders" — and §8.4 recommends
+## reusing `image` rather than writing one. Without it `Image::Rgba` has no
+## macOS representation at all, because the plan there is `public.png` and
+## `public.tiff` and nothing here can produce either from pixels.
+##
+## Off by default because it is by far the largest dependency the crate can
+## pull, and a consumer that already decodes images has an encoder of its own
+## and should hand over an `Image::Encoded` instead. Implies `std`: `image`
+## needs it.
+image = ["dep:image", "std"]
+
 ## Both legs of the styled-text hub.
 rich-text = ["html", "rtf"]
 ## The four spellings of "a file that points somewhere".
@@ -114,6 +129,14 @@ rclip-shell-link    = { workspace = true, optional = true }
 rclip-uri-list      = { workspace = true, optional = true }
 rclip-url-file      = { workspace = true, optional = true }
 rclip-webloc        = { workspace = true, optional = true }
+
+# The one dependency in this workspace that is not a `rclip-*` codec, and the
+# only one not inherited from `[workspace.dependencies]` — every other crate
+# here depends on `rclip-core` and nothing else, so there is no shared version
+# to inherit. Pinned narrow on purpose: `png` and `tiff` are the two encoders
+# the fan-out table names, and the default feature set of `image` is a dozen
+# decoders this crate never calls.
+image = { workspace = true, optional = true }
 
 # Deliberately no self dev-dependency. The other crates in this workspace use
 # one to turn `alloc` on for their own tests; doing it here would turn every

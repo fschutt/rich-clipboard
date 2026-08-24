@@ -702,3 +702,31 @@ fn every_fixture_matches_its_sidecar() {
         "a new fixture needs a test that says what it means"
     );
 }
+
+#[test]
+fn the_one_byte_where_this_diverges_from_glib_is_pinned() {
+    use rclip_uri_list::uri::{percent_encode_to_string, EncodeSet};
+
+    // Measured against GLib 2.88.3: g_filename_to_uri("/tmp/a;b.txt") gives
+    // "file:///tmp/a%3Bb.txt". RFC 3986 puts ';' in sub-delims, so `pchar`
+    // admits it and this set leaves it literal. Both decode to the same path.
+    //
+    // Pinned so the divergence is a decision on the record rather than a
+    // surprise the next person rediscovers against a real GTK app.
+    assert_eq!(
+        percent_encode_to_string(b"/tmp/a;b.txt", EncodeSet::Path),
+        "/tmp/a;b.txt",
+        "';' is a sub-delim and stays literal under pchar"
+    );
+
+    // Everything GLib escapes that is not ';' must also be escaped here, or
+    // the divergence is wider than one byte and the doc is wrong again.
+    for b in br##""#%<>?[\]^`{|}"## {
+        let s = percent_encode_to_string(&[b'/', *b], EncodeSet::Path);
+        assert!(
+            s.contains('%'),
+            "GLib escapes {:?}; leaving it literal would widen the divergence",
+            *b as char
+        );
+    }
+}

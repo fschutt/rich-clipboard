@@ -134,25 +134,73 @@ const RICH_TEXT_WINDOWS: &[WriteFlavor] = &[
     lossy(Flavor::PlainText, FLATTENED),
 ];
 
-// macOS: `public.rtf` is *the* rich flavor. Pages, TextEdit, Mail and Notes all
-// speak it and several speak no HTML at all.
+// macOS: `public.rtf` first, because it is *the* rich flavor there — Pages,
+// TextEdit, Mail and Notes all speak it.
 //
-// TODO(phase-5): whether to add `public.html` here. AppKit's own rich-text
-// writers do not, and the failure mode of guessing wrong — TextEdit pasting raw
-// markup — is bad enough to want the AppKit oracle test from `plan/PLAN.md`
-// §5d before committing to it.
-const RICH_TEXT_MACOS: &[WriteFlavor] = &[full(Flavor::Rtf), lossy(Flavor::PlainText, FLATTENED)];
-
-// X11 / Wayland: GTK and Qt both negotiate rich text as `text/html`.
+// `public.html` second, settled by the AppKit oracle `plan/PLAN.md` §5d asks
+// for and then by pasting this crate's own output into the four applications.
+// Three things were in question:
 //
-// TODO(phase-5): `text/rtf` as a third offer. LibreOffice and AbiWord read it,
-// but no capture in the corpus shows a Linux application *offering* it, and
-// this table should follow observed behaviour rather than lead it.
-const RICH_TEXT_UNIX: &[WriteFlavor] = &[full(Flavor::Html), lossy(Flavor::PlainText, FLATTENED)];
+//   1. Does adding HTML displace RTF for an AppKit consumer? No, and it cannot:
+//      the *reader* picks. `-[NSTextView readablePasteboardTypes]` is ordered
+//      RTFD, RTF, HTML, … and `-[NSPasteboard availableTypeFromArray:]` returns
+//      the first entry of *that* list which is on offer. Pasting both into
+//      TextEdit and into Pages gave the RTF, byte-identical styling either way.
+//   2. Is the feared failure mode — TextEdit pasting raw markup — real? No.
+//      Offered `public.html` alone, an `NSTextView` renders it as styled text:
+//      a `<b>` arrives as an `NSFont` carrying `NSBoldFontMask`, not as three
+//      literal characters.
+//   3. Do the HTML consumers actually need it? They do, and not for the reason
+//      one would guess. WebKit and Chromium do *not* fall back to plain text
+//      without it — macOS converts the RTF for them, so something rich pastes
+//      either way. What that conversion costs is fidelity: Safari and Chrome
+//      both render an 18pt run as `font-size: 18px` when they have to go
+//      through Cocoa's RTF-to-HTML writer, a third smaller than asked for, and
+//      force Helvetica onto every run. Offered `public.html`, both render the
+//      fragment verbatim at 18pt. Mail's WebKit compose is the same story.
+//
+// So the cost is nil and the gain is measured: the size and the font of every
+// paste into a browser, an Electron application, or Mail. Safari itself
+// publishes `public.html` alongside `public.rtf` (`corpus/macos/safari/`), so
+// the pairing is also what the platform's richest producer does.
+const RICH_TEXT_MACOS: &[WriteFlavor] = &[
+    full(Flavor::Rtf),
+    full(Flavor::Html),
+    lossy(Flavor::PlainText, FLATTENED),
+];
 
-// A fragment the caller handed us as markup. There is no HTML tokenizer in this
-// workspace, so the plain-text companion can only be published when the caller
-// supplied one; the encoder skips it otherwise rather than shipping tag soup.
+// X11 / Wayland: `text/html` first, because it is the only rich text the
+// toolkits speak. Qt has no RTF anywhere — `QTextEdit`'s rich text *is* an HTML
+// subset — and GTK's rich-text clipboard target is
+// `application/x-gtk-text-buffer-rich-text`, which GTK's own documentation says
+// "does not comply to any standard rich text format and only works between
+// GtkTextBuffer instances".
+//
+// `text/rtf` second, for the applications underneath the toolkits that do read
+// it: LibreOffice registers `text/rtf` for `SotClipboardFormatId::RTF`, and
+// AbiWord imports RTF. It is second and not first precisely because of the
+// paragraph above — the toolkits are the majority and HTML is what they take —
+// which is the one place this table inverts the Windows and macOS order, and it
+// inverts it for a stated reason.
+//
+// What is deliberately *not* offered is `text/richtext`. That is what
+// LibreOffice itself advertises RTF under on X11, and the bytes beneath it
+// really do start `{\rtf1` — but `text/richtext` is RFC 1896 enriched text,
+// which is a different format, and emitting RTF under it is mislabelling.
+// `rclip_core::Flavor::from_mime` already accepts `text/richtext` as
+// `Flavor::Rtf`, which is the correct asymmetry: liberal in what the read side
+// accepts, conservative in what the write side claims.
+const RICH_TEXT_UNIX: &[WriteFlavor] = &[
+    full(Flavor::Html),
+    full(Flavor::Rtf),
+    lossy(Flavor::PlainText, FLATTENED),
+];
+
+// A fragment the caller handed us as markup. The plain-text companion is
+// published only when the fragment carries one — `decode` fills it in from the
+// markup, since there is a tokenizer now, but a fragment built by hand has
+// none, and `RichItem::plain_text` does not parse. The encoder skips the flavor
+// rather than shipping tag soup under it.
 const HTML: &[WriteFlavor] = &[
     full(Flavor::Html),
     lossy(
@@ -166,10 +214,13 @@ const IMAGE_WINDOWS: &[WriteFlavor] = &[
     full(Flavor::Png),
     lossy(
         Flavor::Dib,
-        "BITMAPINFOHEADER has no alpha channel; the image goes opaque",
+        "BITMAPINFOHEADER has no alpha channel; the image is composited over white",
     ),
 ];
 
+// `public.png` and `public.tiff`. Both need an encoder that `plan/PLAN.md` §4.4
+// keeps out of this workspace, so from pixels they are filled only with the
+// `image` feature on; from an `Image::Encoded` they need nothing.
 const IMAGE_MACOS: &[WriteFlavor] = &[full(Flavor::Png), full(Flavor::Tiff)];
 
 // `image/bmp` is deliberately absent. A BMP on the X11 or Wayland clipboard is
@@ -188,8 +239,10 @@ const FILES_WINDOWS: &[WriteFlavor] = &[
     ),
 ];
 
-// One `public.file-url` per file. See `crate::encode` for the caveat: a macOS
-// pasteboard models this as N *items*, and `ClipboardPayload` is a flat list.
+// One `public.file-url` per file, and — the part that is easy to get wrong —
+// one pasteboard *item* per file rather than one item offering the type N
+// times. `ClipboardPayload` records the item index, so `encode` emits the
+// grouping and `decode_payload` reassembles it.
 const FILES_MACOS: &[WriteFlavor] = &[full(Flavor::FileList)];
 
 // `rclip_uri_list::emit::RECOMMENDED`, spelled in this crate's vocabulary.

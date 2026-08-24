@@ -51,21 +51,49 @@ fn styled_text_fans_out_to_three_flavors_on_windows() {
 }
 
 #[test]
-fn styled_text_is_rtf_plus_plain_on_macos() {
-    // No `public.html`: Pages, TextEdit, Mail and Notes all speak RTF and
-    // several speak no HTML at all.
+fn styled_text_leads_with_rtf_on_macos_and_offers_html_behind_it() {
+    // RTF first because it is *the* macOS rich flavor. HTML second because the
+    // AppKit oracle says it costs nothing to add: `NSTextView`'s own readable
+    // types are ordered RTFD, RTF, HTML and the reader's order is what decides,
+    // so an AppKit paste still takes the RTF. What it buys is fidelity in
+    // WebKit and Chromium, which otherwise reach our styling through Cocoa's
+    // RTF-to-HTML conversion and render an 18pt run at 18px.
     assert_eq!(
         natives(ItemKind::RichText, Platform::MacOs),
-        ["public.rtf", "public.utf8-plain-text"]
+        ["public.rtf", "public.html", "public.utf8-plain-text"]
     );
 }
 
 #[test]
-fn styled_text_is_html_plus_plain_on_unix() {
+fn styled_text_leads_with_html_on_unix_and_that_inversion_is_deliberate() {
+    // The one row where the Unix order is not the Windows and macOS order.
+    // Qt's rich text *is* an HTML subset — it has no RTF support anywhere —
+    // and GTK's rich-text clipboard target is its own internal serialization,
+    // so `text/html` is what the toolkits take. `text/rtf` is behind it, for
+    // LibreOffice and AbiWord.
     assert_eq!(
         natives(ItemKind::RichText, Platform::Unix),
-        ["text/html", "text/plain;charset=utf-8"]
+        ["text/html", "text/rtf", "text/plain;charset=utf-8"]
     );
+    // And never `text/richtext`, which is RFC 1896 enriched text and a
+    // different format, however many applications abuse it for RTF.
+    assert!(!natives(ItemKind::RichText, Platform::Unix).contains(&"text/richtext"));
+}
+
+#[test]
+fn every_platform_offers_the_same_rich_text_flavors_bar_the_order() {
+    // Three tables, one set: styled text goes out as RTF, HTML and plain text
+    // everywhere, and only the ranking differs. A platform missing one of them
+    // is a paste that lands worse than it had to.
+    for platform in PLATFORMS {
+        let mut got = flavors(ItemKind::RichText, platform);
+        got.sort_by_key(rclip_core::Flavor::read_rank);
+        assert_eq!(
+            got,
+            [Flavor::Rtf, Flavor::Html, Flavor::PlainText],
+            "on {platform:?}"
+        );
+    }
 }
 
 #[test]

@@ -295,18 +295,115 @@ fn a_windows_drop_effect_reaches_the_file_list() {
 
 #[cfg(feature = "file-list")]
 #[test]
-fn a_macos_multi_file_selection_is_reassembled_from_its_repeated_items() {
-    // A macOS pasteboard models this as N items sharing one type. A per-item
-    // decode sees one file; `decode_payload` collects the rest.
+fn a_macos_multi_file_selection_is_reassembled_from_its_items() {
+    // A macOS pasteboard models this as N *items*, each offering one
+    // `public.file-url`. A per-item decode sees one file — which is exactly
+    // what `-[NSPasteboard dataForType:]` gives a transport that does not know
+    // about items — and `decode_payload` puts the selection back together.
     let payload = ClipboardPayload::new(Platform::MacOs)
-        .with("public.file-url", &b"file:///Users/me/a.txt"[..])
-        .with("public.file-url", &b"file:///Users/me/b%20c.txt"[..]);
+        .with_in(0, "public.file-url", &b"file:///Users/me/a.txt"[..])
+        .with_in(1, "public.file-url", &b"file:///Users/me/b%20c.txt"[..])
+        .with_in(2, "public.file-url", &b"file:///Users/me/c.txt"[..]);
+    assert_eq!(payload.item_count(), 3);
+
+    // What the naive read would have given: item 0 alone, one file.
+    let RichItem::Files(one) = decode(&payload.items()[0], Platform::MacOs).unwrap() else {
+        panic!("expected files");
+    };
+    assert_eq!(one.len(), 1);
+
+    let RichItem::Files(list) = decode_payload(&payload).unwrap() else {
+        panic!("expected files");
+    };
+    assert_eq!(list.len(), 3);
+    assert_eq!(list.entries[1].as_path(), Some("/Users/me/b c.txt"));
+}
+
+#[cfg(feature = "file-list")]
+#[test]
+fn items_are_reassembled_in_item_order_and_not_in_arrival_order() {
+    // A transport that enumerated the pasteboard by type rather than by item
+    // hands the representations over out of order. The user's selection order
+    // is the item index, so that is what the reassembly follows.
+    let payload = ClipboardPayload::new(Platform::MacOs)
+        .with_in(2, "public.file-url", &b"file:///c.txt"[..])
+        .with_in(0, "public.file-url", &b"file:///a.txt"[..])
+        .with_in(1, "public.file-url", &b"file:///b.txt"[..]);
+
+    let RichItem::Files(list) = decode_payload(&payload).unwrap() else {
+        panic!("expected files");
+    };
+    let paths: Vec<_> = list.entries.iter().filter_map(|e| e.as_path()).collect();
+    assert_eq!(paths, ["/a.txt", "/b.txt", "/c.txt"]);
+}
+
+#[cfg(feature = "file-list")]
+#[test]
+fn a_transport_that_does_not_track_items_still_gets_every_file() {
+    // Item indices are new; a transport that leaves them all at zero is not
+    // wrong, just less informative. Every representation still gets collected,
+    // because the reassembly is by flavor and the sort by item is only a
+    // tie-broken ordering.
+    let payload = ClipboardPayload::new(Platform::MacOs)
+        .with("public.file-url", &b"file:///a.txt"[..])
+        .with("public.file-url", &b"file:///b.txt"[..]);
+    assert_eq!(payload.item_count(), 1);
 
     let RichItem::Files(list) = decode_payload(&payload).unwrap() else {
         panic!("expected files");
     };
     assert_eq!(list.len(), 2);
-    assert_eq!(list.entries[1].as_path(), Some("/Users/me/b c.txt"));
+}
+
+#[cfg(feature = "file-list")]
+#[test]
+fn a_real_two_file_finder_copy_comes_back_as_two_files() {
+    // `corpus/macos/finder/`: two `NSPasteboardItem`s captured off the general
+    // pasteboard after selecting two files in Finder and pressing Cmd-C. Note
+    // what Finder actually puts there — the opaque `file:///.file/id=` form,
+    // which only the file system can resolve. It stays a path-shaped string
+    // and nothing here resolves it.
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/macos/finder/");
+    let payload = ClipboardPayload::new(Platform::MacOs)
+        .with_in(
+            0,
+            "public.file-url",
+            std::fs::read(format!("{root}item-00.public.file-url.bin")).expect("capture"),
+        )
+        .with_in(
+            1,
+            "public.file-url",
+            std::fs::read(format!("{root}item-01.public.file-url.bin")).expect("capture"),
+        );
+
+    let RichItem::Files(list) = decode_payload(&payload).unwrap() else {
+        panic!("expected files");
+    };
+    assert_eq!(list.len(), 2);
+    assert_eq!(
+        list.entries[0].as_path(),
+        Some("/.file/id=6571367.381000889")
+    );
+    assert_eq!(
+        list.entries[1].as_path(),
+        Some("/.file/id=6571367.381000890")
+    );
+}
+
+#[cfg(feature = "file-list")]
+#[test]
+fn a_macos_file_list_survives_a_publish_and_a_read_back() {
+    use rich_clipboard::{encode, FileList};
+
+    // The loop a transport runs, with the grouping in the middle: `encode`
+    // emits one item per file and `decode_payload` reassembles the same list.
+    let before = FileList::of_paths(["/Users/me/a b.txt", "/Users/me/c.txt", "/Users/me/d.txt"]);
+    let payload = encode(&RichItem::Files(before.clone()), Platform::MacOs).unwrap();
+
+    let RichItem::Files(after) = decode_payload(&payload).unwrap() else {
+        panic!("expected files");
+    };
+    assert_eq!(after.entries, before.entries);
 }
 
 #[cfg(feature = "dib")]

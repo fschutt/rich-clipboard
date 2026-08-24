@@ -29,5 +29,10 @@ rclip-uri-list = { version = "0.1.0", path = "crates/rclip-uri-list" }
 rclip-url-file = { version = "0.1.0", path = "crates/rclip-url-file" }
 rclip-webloc = { version = "0.1.0", path = "crates/rclip-webloc" }
 
+# Third-party. Only ever an optional dependency: PNG/TIFF are deliberately
+# out of scope for rclip-dib (PLAN.md 4.4), so the facade delegates behind an
+# opt-in feature rather than every consumer paying for a decoder.
+image = { version = "0.25", default-features = false, features = ["png", "tiff"] }
+
 [profile.test]
 opt-level = 1

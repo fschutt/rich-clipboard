@@ -326,21 +326,37 @@ fn enrich(item: RichItem, payload: &ClipboardPayload, _options: &Options) -> Ric
     match item {
         RichItem::Files(mut list) => {
             list.action = transfer_action(payload);
-            // A macOS pasteboard models a multi-file drag as N *items*, each
-            // one `public.file-url`. `ClipboardPayload` is a flat list with no
-            // item grouping, so the files arrive as N entries sharing an
-            // identifier and only the first survives a per-item decode.
+            // A macOS pasteboard models a multi-file selection as N *items*,
+            // each offering one `public.file-url` — copying three files in
+            // Finder produces three items, not one item offering the type
+            // three times. `decode` is handed a single `ClipboardItem` and can
+            // only ever see one file, so reassembling the selection is
+            // `decode_payload`'s job and nothing else's.
             //
-            // TODO(phase-5): item grouping in `rclip_core::ClipboardPayload`.
-            // Until then, collecting them here is the difference between
-            // pasting one file and pasting the selection.
+            // `ClipboardPayload::all` rather than `get`, which is the whole
+            // point: first-match-wins is what turns a three-file paste into a
+            // one-file paste.
+            //
+            // macOS only, and by platform rather than by
+            // `ClipboardPayload::item_count`: `public.file-url` is one URI per
+            // representation, so collecting them is addition. A `CF_HDROP` or a
+            // `text/uri-list` already holds the whole selection in one blob, and
+            // re-reading it as a single URI would replace the list with one
+            // nonsense entry.
             if platform == Platform::MacOs {
-                let all: Vec<_> = payload
-                    .items()
-                    .iter()
-                    .filter(|i| i.flavor(platform) == Flavor::FileList)
+                let mut parts: Vec<&ClipboardItem> = payload.all(Flavor::FileList).collect();
+                // By item index, so a transport that enumerated the pasteboard
+                // out of order still hands back the user's selection in the
+                // order they made it. Stable, so two representations within one
+                // item keep the source's ordering.
+                parts.sort_by_key(|i| i.item);
+                let all: Vec<_> = parts
+                    .into_iter()
                     .filter_map(|i| file_entry_from_uri(&text::decode_plain(&i.bytes, platform)))
                     .collect();
+                // Never fewer than the per-item decode already found: a URI
+                // this build declines to turn into an entry must not take the
+                // selection down with it.
                 if all.len() > list.entries.len() {
                     list.entries = all;
                 }

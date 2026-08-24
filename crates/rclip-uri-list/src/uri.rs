@@ -146,10 +146,27 @@ pub enum EncodeSet {
     /// `/` is the segment separator, so all of
     /// `A-Za-z0-9-._~!$&'()*+,;=:@/` stay literal.
     ///
-    /// This is byte-for-byte GLib's `G_URI_RESERVED_CHARS_ALLOWED_IN_PATH`,
-    /// which is what `g_filename_to_uri` escapes with — so a URI produced here
-    /// is textually identical to the one Nautilus would have produced for the
-    /// same path, which is what makes a comparison on the receiving side work.
+    /// It is *close to* what GLib produces, and differs by exactly one byte.
+    /// Measured against GLib 2.88.3 by sweeping every printable ASCII byte
+    /// through `g_filename_to_uri`:
+    ///
+    /// ```text
+    /// GLib leaves literal:  ! $ & ' ( ) * + , - . : = @ ~ 0-9 A-Z a-z _ /
+    /// GLib escapes:         " # % ; < > ? [ \ ] ^ ` { | }
+    /// ```
+    ///
+    /// So GLib escapes `;` as `%3B` and this set does not. `g_filename_to_uri`
+    /// does not use `G_URI_RESERVED_CHARS_ALLOWED_IN_PATH` — it escapes against
+    /// a more conservative *unsafe* list — so a claim of byte-for-byte identity
+    /// would be wrong.
+    ///
+    /// Both forms decode to the same path, so this is an interop nit rather
+    /// than corruption: the only thing that can notice is a receiver comparing
+    /// URI *text* instead of decoded paths, for a filename containing a
+    /// semicolon. If that ever turns up in practice, the fix is a separate
+    /// GLib-exact variant rather than bending this one — `EncodeSet` is
+    /// `#[non_exhaustive]` precisely so that stays cheap. Bending `Path` would
+    /// make it not `pchar`, which is the one thing its name promises.
     Path,
     /// One path *segment*: `pchar` only.
     ///
