@@ -18,6 +18,7 @@ instant a user presses Ctrl+V.
 - [`plan/PLAN.md`](plan/PLAN.md) — the design plan and phasing
 - [`plan/specs.md`](plan/specs.md) — every spec cited, with links
 - [`plan/CONVENTIONS.md`](plan/CONVENTIONS.md) — rules for codec crates
+- [`plan/INTEGRATION.md`](plan/INTEGRATION.md) — **wiring this into a GUI framework**: the seam, the API, and the per-platform traps
 
 ## Status
 
