@@ -75,6 +75,41 @@ pub mod drop_effect {
     pub const LINK: u32 = 4;
 }
 
+/// Which naming scheme an item's `native` identifier is written in.
+///
+/// The same flavor is `"public.html"`, `"HTML Format"` or `"text/html"`
+/// depending on where it came from, so the payload has to remember which
+/// vocabulary it was built with.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Platform {
+    /// Win32 clipboard format names.
+    Windows,
+    /// macOS Uniform Type Identifiers.
+    MacOs,
+    /// X11 selection targets and Wayland MIME types — one vocabulary, two
+    /// transports.
+    Unix,
+}
+
+impl Platform {
+    /// The platform this build targets, for callers wiring up a real clipboard.
+    #[must_use]
+    pub const fn native() -> Self {
+        #[cfg(target_os = "windows")]
+        {
+            Self::Windows
+        }
+        #[cfg(target_os = "macos")]
+        {
+            Self::MacOs
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        {
+            Self::Unix
+        }
+    }
+}
+
 /// What is on the clipboard, abstractly.
 ///
 /// Borrowed rather than owning so the whole registry works without `alloc`.
@@ -119,6 +154,30 @@ pub enum Flavor<'a> {
 
     /// Anything not in the table above, by its platform-native name.
     Other(&'a str),
+}
+
+impl WindowsFormat {
+    /// The canonical name for this format.
+    ///
+    /// For a registered format that is the string you pass to
+    /// `RegisterClipboardFormat`; for a predefined one it is the `CF_*`
+    /// constant's own name, which is what [`Flavor::from_windows_name`] reads
+    /// back.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self {
+            Self::Registered(s) => s,
+            Self::Predefined(cf::TEXT) => "CF_TEXT",
+            Self::Predefined(cf::OEMTEXT) => "CF_OEMTEXT",
+            Self::Predefined(cf::UNICODETEXT) => "CF_UNICODETEXT",
+            Self::Predefined(cf::TIFF) => "CF_TIFF",
+            Self::Predefined(cf::DIB) => "CF_DIB",
+            Self::Predefined(cf::DIBV5) => "CF_DIBV5",
+            Self::Predefined(cf::HDROP) => "CF_HDROP",
+            Self::Predefined(cf::BITMAP) => "CF_BITMAP",
+            Self::Predefined(_) => return None,
+        })
+    }
 }
 
 impl<'a> Flavor<'a> {
@@ -260,7 +319,24 @@ impl<'a> Flavor<'a> {
         }
     }
 
-    fn from_windows_name(name: &'a str) -> Self {
+    /// Recognize a Win32 format by name.
+    ///
+    /// Accepts both the registered `CFSTR_*` strings and the canonical
+    /// `CF_*` spellings of the predefined numeric formats. A transport layer
+    /// enumerating the clipboard has a number for the predefined ones and a
+    /// string for the rest; naming both here means a payload can carry either
+    /// without a second code path.
+    #[must_use]
+    pub fn from_windows_name(name: &'a str) -> Self {
+        match name {
+            // Predefined formats, by their canonical constant name.
+            "CF_UNICODETEXT" | "CF_TEXT" | "CF_OEMTEXT" => return Self::PlainText,
+            "CF_TIFF" => return Self::Tiff,
+            "CF_DIB" => return Self::Dib,
+            "CF_DIBV5" => return Self::DibV5,
+            "CF_HDROP" => return Self::FileList,
+            _ => {}
+        }
         match name {
             cfstr::HTML => Self::Html,
             cfstr::RTF | cfstr::RTF_NO_OBJS => Self::Rtf,
@@ -273,6 +349,21 @@ impl<'a> Flavor<'a> {
             cfstr::INETURL | cfstr::INETURL_A => Self::Url,
             cfstr::PREFERREDDROPEFFECT => Self::DropEffect,
             other => Self::Other(other),
+        }
+    }
+
+    /// Resolve a platform-native identifier against the registry.
+    ///
+    /// The three vocabularies are disjoint enough that a caller which knows
+    /// where the bytes came from should always use this rather than guessing:
+    /// `"text/html"` is meaningless as a UTI, and `"public.html"` is meaningless
+    /// as a MIME type.
+    #[must_use]
+    pub fn from_native(platform: Platform, native: &'a str) -> Self {
+        match platform {
+            Platform::Windows => Self::from_windows_name(native),
+            Platform::MacOs => Self::from_uti(native),
+            Platform::Unix => Self::from_mime(native),
         }
     }
 

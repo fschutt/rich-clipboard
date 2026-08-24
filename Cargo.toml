@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["crates/*"]
+members = ["crates/*", "tools/*"]
+# cargo-fuzz keeps its own nightly-only workspace.
+exclude = ["fuzz"]
 
 [workspace.package]
 version      = "0.1.0"

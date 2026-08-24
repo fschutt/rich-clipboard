@@ -15,3 +15,7 @@ alloc = []
 std = ["alloc"]
 
 [dependencies]
+
+[dev-dependencies]
+# The payload type needs an allocator; the library still defaults to neither.
+rclip-core = { path = ".", features = ["alloc"] }

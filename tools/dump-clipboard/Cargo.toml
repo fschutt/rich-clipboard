@@ -1,0 +1,13 @@
+[package]
+name        = "dump-clipboard"
+description = "Dump every format the system clipboard is currently offering, one file per flavor"
+publish     = false
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[dependencies]
+rclip-core = { workspace = true, features = ["std"] }
