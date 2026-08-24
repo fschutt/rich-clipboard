@@ -32,6 +32,7 @@ extern crate std;
 
 pub mod error;
 pub mod flavor;
+pub mod limits;
 #[cfg(feature = "alloc")]
 pub mod payload;
 pub mod reader;
@@ -40,6 +41,7 @@ pub mod utf16;
 
 pub use error::{Error, ErrorKind, Result};
 pub use flavor::{Flavor, Platform, WindowsFormat};
+pub use limits::{Budget, Limits, Oversize, OversizePolicy, SizeHint};
 #[cfg(feature = "alloc")]
 pub use payload::{ClipboardItem, ClipboardPayload};
 pub use reader::Reader;

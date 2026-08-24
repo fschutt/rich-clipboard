@@ -11,10 +11,6 @@
 //! or resolving a relative one, needs the filesystem — which is exactly what a
 //! codec must never touch.
 
-//
-// TODO(phase-4): hoist this into `rclip-core` and have all four shortcut crates
-// re-export it, deleting this mirror.
-
 /// Where a shortcut points.
 ///
 /// Borrowed from the parsed file, never resolved. Nothing in this workspace

@@ -355,7 +355,7 @@ impl<'a> Flavor<'a> {
             "public.file-url" | "NSFilenamesPboardType" => Self::FileList,
             "public.url" | "Apple URL pasteboard type" => Self::Url,
             "public.url-name" => Self::UrlName,
-            other => return Self::from_core_pasteboard_type(other),
+            other => Self::from_core_pasteboard_type(other),
         }
     }
 
